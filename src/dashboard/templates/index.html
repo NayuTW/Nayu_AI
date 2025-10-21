@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Agent Control Center</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <style>
+    body { font-family: system-ui, Segoe UI, Arial; margin: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    pre { background: #111; color: #eee; padding: 8px; height: 300px; overflow: auto; white-space: pre-wrap; }
+    table { width: 100%; font-size: 14px; }
+    th, td { text-align: left; vertical-align: top; }
+    .ok { color: #0a0; } .bad { color: #a00; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body hx-get="/tools" hx-trigger="load" hx-target="#tools-container">
+  <h1>Agent Control Center</h1>
+
+  <div class="grid">
+    <div>
+      <h2>Tools</h2>
+      <div id="tools-container">Loading...</div>
+    </div>
+    <div>
+      <h2>Health</h2>
+      <div id="health-container" hx-get="/health" hx-trigger="load" hx-target="#health-container"></div>
+      <ul id="health-list"></ul>
+    </div>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <div>
+      <h2>Settings</h2>
+      <div id="settings" hx-get="/settings" hx-trigger="load" hx-target="#settings">Loading...</div>
+    </div>
+    <div>
+      <h2>Live Events</h2>
+      <pre id="events"></pre>
+    </div>
+  </div>
+
+  <div style="margin-top:16px">
+    <h2>Dataset curation</h2>
+    <div id="examples-container" hx-get="/examples" hx-trigger="load" hx-target="#examples-container">Loading...</div>
+  </div>
+
+  <script>
+    const eventsEl = document.getElementById('events');
+    const healthList = document.getElementById('health-list');
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'init') {
+            const payload = msg.payload || {};
+            if (payload.events) {
+                payload.events.forEach(ev => {
+                    eventsEl.textContent += JSON.stringify(ev) + "\n";
+                });
+                eventsEl.scrollTop = eventsEl.scrollHeight;
+            }
+            return;
+        }
+        if (msg.type === 'health.update') {
+            healthList.innerHTML = '';
+            const payload = msg.payload;
+            for (const [k, v] of Object.entries(payload)) {
+                const li = document.createElement('li');
+                li.innerHTML = `<b>${k}</b>: <span class="${v.ok ? 'ok' : 'bad'}">${v.ok ? 'OK' : ('ERR: ' + (v.error || ''))}</span>`;
+                healthList.appendChild(li);
+            }
+            return;
+        }
+        eventsEl.textContent += JSON.stringify(msg) + "\n";
+        eventsEl.scrollTop = eventsEl.scrollHeight;
+
+        if (msg.type.startsWith('tool.')) {
+            htmx.ajax('GET', '/tools', {target:'#tools-container', swap:'innerHTML'});
+        }
+        if (msg.type === 'settings.update') {
+            htmx.ajax('GET', '/settings', {target:'#settings', swap:'outerHTML'});
+        }
+        if (msg.type === 'dataset.example' || msg.type === 'dataset.label' || msg.type === 'agent.output' || msg.type === 'dataset.export') {
+            htmx.ajax('GET', '/examples', {target:'#examples-container', swap:'innerHTML'});
+        }
+    };
+  </script>
+</body>
+</html>
