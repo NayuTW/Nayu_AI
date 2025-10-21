@@ -25,14 +25,7 @@ Install:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install --upgrade pip
-pip install \
-  aiohttp fastapi uvicorn \
-  playwright pillow mss pyautogui \
-  duckduckgo-search readability-lxml html2text \
-  chromadb sentence-transformers fastembed \
-  faster-whisper \
-  transformers accelerate bitsandbytes \
-  beautifulsoup4 lxml
+pip install -r requirements.txt
 
 # Playwright browser
 playwright install chromium
