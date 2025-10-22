@@ -1,9 +1,9 @@
 import asyncio
 from typing import Optional
 
-from agents.core.events import EventBus
-from agents.core.registry import ToolRegistry
-from agents.notify.notifier import Notifier
+from app.src.agents.core.events import EventBus
+from app.src.agents.core.registry import ToolRegistry
+from app.src.agents.notify.notifier import Notifier
 
 class ErrorSpeaker:
     """

@@ -36,7 +36,7 @@ playwright install chromium
 
 Start services (dashboard binds 0.0.0.0 by default so your host can access the VM’s dashboard):
 ```bash
-python -m src.app
+python -m app.src
 ```
 Open the dashboard at:
 - From inside VM: http://127.0.0.1:8008

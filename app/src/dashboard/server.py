@@ -5,14 +5,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from agents.core.events import EventBus
-from agents.core.registry import ToolRegistry
-from agents.core.health import HealthChecker
-from agents.notify.notifier import Notifier
-from agents.core.store import SQLiteStore
+from app.src.agents.core.events import EventBus
+from app.src.agents.core.registry import ToolRegistry
+from app.src.agents.core.health import HealthChecker
+from app.src.agents.notify.notifier import Notifier
+from app.src.agents.core.store import SQLiteStore
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="src/dashboard/static"), name="static")
+app.mount("/static", StaticFiles(directory="app/src/dashboard/static"), name="static")
 
 bus: EventBus = None
 registry: ToolRegistry = None
@@ -20,12 +20,12 @@ health: HealthChecker = None
 store: SQLiteStore = None
 notifier: Notifier = None
 
-EXPORT_DIR = "src/dashboard/static/exports"
+EXPORT_DIR = "app/src/dashboard/static/exports"
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    html = open("src/dashboard/templates/index.html", "r", encoding="utf-8").read()
+    html = open("app/src/dashboard/templates/index.html", "r", encoding="utf-8").read()
     return HTMLResponse(html)
 
 @app.get("/tools", response_class=HTMLResponse)

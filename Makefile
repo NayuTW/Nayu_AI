@@ -28,7 +28,7 @@ playwright:
 # Create required local directories
 .PHONY: dirs
 dirs:
-	mkdir -p .cache .chroma workspace src/dashboard/static/exports
+	mkdir -p .cache .chroma workspace app/src/dashboard/static/exports
 
 # Optional: pull example models with Ollama (requires Ollama installed and running on the VM)
 .PHONY: pull-models
@@ -39,12 +39,12 @@ pull-models:
 # Run the app (dashboard will bind to AGENT_DASH_HOST:AGENT_DASH_PORT)
 .PHONY: run
 run:
-	AGENT_DASH_HOST=$(AGENT_DASH_HOST) AGENT_DASH_PORT=$(AGENT_DASH_PORT) $(PYTHON) -m src.app
+	AGENT_DASH_HOST=$(AGENT_DASH_HOST) AGENT_DASH_PORT=$(AGENT_DASH_PORT) $(PYTHON) -m app.src
 
 # Developer run bound to localhost only
 .PHONY: run-local
 run-local:
-	AGENT_DASH_HOST=127.0.0.1 AGENT_DASH_PORT=$(AGENT_DASH_PORT) $(PYTHON) -m src.app
+	AGENT_DASH_HOST=127.0.0.1 AGENT_DASH_PORT=$(AGENT_DASH_PORT) $(PYTHON) -m app.src
 
 # Quick sanity checks for key services (best-effort)
 .PHONY: check
@@ -57,7 +57,7 @@ check:
 # Clean caches and artifacts (does not remove vector DB)
 .PHONY: clean
 clean:
-	rm -rf .cache src/dashboard/static/exports/*
+	rm -rf .cache app/src/dashboard/static/exports/*
 
 # Full reset (removes venv and Chroma data)
 .PHONY: reset
@@ -72,9 +72,9 @@ reset: clean
 export-labeled:
 	@echo "Requesting labeled dataset export..."
 	@curl -sS -X POST -d "include_unlabeled=0" http://$(AGENT_DASH_HOST):$(AGENT_DASH_PORT)/examples/export || true
-	@echo "\nCheck src/dashboard/static/exports for the exported JSONL."
+	@echo "\nCheck app/src/dashboard/static/exports for the exported JSONL."
 
 export-all:
 	@echo "Requesting full dataset export (including unlabeled)..."
 	@curl -sS -X POST -d "include_unlabeled=1" http://$(AGENT_DASH_HOST):$(AGENT_DASH_PORT)/examples/export || true
-	@echo "\nCheck src/dashboard/static/exports for the exported JSONL."
+	@echo "\nCheck app/src/dashboard/static/exports for the exported JSONL."

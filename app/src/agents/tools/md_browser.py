@@ -15,7 +15,7 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 
 from smolagents import Tool
 
-from agents.embeddings.local_embedder import LocalEmbedder
+from app.src.agents.embeddings.local_embedder import LocalEmbedder
 
 CACHE_DIR = ".cache/md_browser"
 os.makedirs(CACHE_DIR, exist_ok=True)
