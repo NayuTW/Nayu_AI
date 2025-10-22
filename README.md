@@ -58,6 +58,8 @@ NeuTTS-Air provides state-of-the-art voice cloning. To use TTS features:
 
 Without reference audio configured, the speech tool will print text instead of generating audio.
 
+For detailed TTS setup instructions, see [docs/TTS_SETUP.md](docs/TTS_SETUP.md).
+
 Start services (dashboard binds 0.0.0.0 by default so your host can access the VM’s dashboard):
 ```bash
 python -m src.app
