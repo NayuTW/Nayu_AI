@@ -37,6 +37,27 @@ playwright install chromium
 # Mac OS: brew install espeak
 ```
 
+## Configuring NeuTTS-Air for Voice Synthesis
+
+NeuTTS-Air provides state-of-the-art voice cloning. To use TTS features:
+
+1. **Reference audio is required** for voice cloning. Prepare:
+   - A 3-15 second mono .wav file (16-44 kHz sample rate)
+   - Clear, natural speech with minimal background noise
+   - A text file with the exact transcript
+
+2. **Configure via environment variables**:
+   ```bash
+   export TTS_REF_AUDIO=/path/to/reference.wav
+   export TTS_REF_TEXT=/path/to/transcript.txt
+   # Or provide text directly:
+   export TTS_REF_TEXT="The exact transcript of the reference audio"
+   ```
+
+3. **Example reference files** are available in the [NeuTTS-Air samples](https://github.com/neuphonic/neutts-air/tree/main/samples).
+
+Without reference audio configured, the speech tool will print text instead of generating audio.
+
 Start services (dashboard binds 0.0.0.0 by default so your host can access the VM’s dashboard):
 ```bash
 python -m src.app
