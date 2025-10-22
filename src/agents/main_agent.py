@@ -2,19 +2,19 @@ import asyncio
 import time
 from typing import Any, Dict
 
-from agents.state import SharedState
-from agents.llm.ollama_client import OllamaLLM
-from agents.core.events import EventBus
-from agents.core.registry import ToolRegistry
-from agents.notify.notifier import Notifier
-from agents.core.store import SQLiteStore
+from src.agents.state import SharedState
+from src.agents.llm.ollama_client import OllamaLLM
+from src.agents.core.events import EventBus
+from src.agents.core.registry import ToolRegistry
+from src.agents.notify.notifier import Notifier
+from src.agents.core.store import SQLiteStore
 
-from agents.tools.web import WebTool
-from agents.tools.desktop import DesktopTool
-from agents.tools.vision import VisionTool
-from agents.tools.memory import MemoryTool
-from agents.tools.speech import SpeechTool
-from agents.tools.codeagent import CodeAgentTool
+from src.agents.tools.web import WebTool
+from src.agents.tools.desktop import DesktopTool
+from src.agents.tools.vision import VisionTool
+from src.agents.tools.memory import MemoryTool
+from src.agents.tools.speech import SpeechTool
+from src.agents.tools.codeagent import CodeAgentTool
 
 SYSTEM_PROMPT = """You are the orchestrator. Think step-by-step. Use tools when helpful.
 Maintain awareness by updating and reading the shared state summary, not raw logs.

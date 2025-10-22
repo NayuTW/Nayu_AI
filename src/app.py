@@ -4,20 +4,20 @@ import uvicorn
 import uuid
 import os
 
-from agents.state import SharedState
-from agents.core.events import EventBus
-from agents.core.registry import ToolRegistry
-from agents.core.health import HealthChecker
-from agents.core.store import SQLiteStore
-from agents.notify.notifier import Notifier
-from agents.notify.error_speaker import ErrorSpeaker
-from agents.tools.speech import SpeechTool
-from agents.main_agent import MainAgent
+from src.agents.state import SharedState
+from src.agents.core.events import EventBus
+from src.agents.core.registry import ToolRegistry
+from src.agents.core.health import HealthChecker
+from src.agents.core.store import SQLiteStore
+from src.agents.notify.notifier import Notifier
+from src.agents.notify.error_speaker import ErrorSpeaker
+from src.agents.tools.speech import SpeechTool
+from src.agents.main_agent import MainAgent
 
-from dashboard.server import init_dashboard
+from src.dashboard.server import init_dashboard
 
 async def start_dashboard(bus, registry, health, store, notifier):
-    from dashboard.server import app
+    from src.dashboard.server import app
     init_dashboard(bus, registry, health, store, notifier)
     host = os.getenv("AGENT_DASH_HOST", "0.0.0.0")
     port = int(os.getenv("AGENT_DASH_PORT", "8008"))

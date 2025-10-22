@@ -7,9 +7,9 @@ import sys
 
 from smolagents import CodeAgent, Tool
 
-from agents.llm.smol_ollama_model import SmolOllamaModel
-from agents.tools.md_browser import MarkdownBrowserTool
-from agents.sandbox.guardrails import GuardedEnv
+from src.agents.llm.smol_ollama_model import SmolOllamaModel
+from src.agents.tools.md_browser import MarkdownBrowserTool
+from src.agents.sandbox.guardrails import GuardedEnv
 
 class GetUrlTool(Tool):
     name = "get_url"

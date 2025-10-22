@@ -5,11 +5,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from agents.core.events import EventBus
-from agents.core.registry import ToolRegistry
-from agents.core.health import HealthChecker
-from agents.notify.notifier import Notifier
-from agents.core.store import SQLiteStore
+from src.agents.core.events import EventBus
+from src.agents.core.registry import ToolRegistry
+from src.agents.core.health import HealthChecker
+from src.agents.notify.notifier import Notifier
+from src.agents.core.store import SQLiteStore
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="src/dashboard/static"), name="static")

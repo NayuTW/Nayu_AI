@@ -1,7 +1,7 @@
 import re
 from typing import Dict, Any, List, Optional, Tuple
 import chromadb
-from agents.embeddings.local_embedder import LocalEmbedder
+from src.agents.embeddings.local_embedder import LocalEmbedder
 
 def _chunk_text(text: str, max_chars: int = 900, overlap: int = 120) -> List[str]:
     text = re.sub(r"\s+", " ", text).strip()
