@@ -1,16 +1,30 @@
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from faster_whisper import WhisperModel
-import subprocess
-import shutil
+import os
 
 class SpeechTool:
-    def __init__(self, state, stt_model_size="small.en", tts_voice_model_path: str = ""):
+    def __init__(self, state, stt_model_size="small.en", tts_ref_audio: str = "", tts_ref_text: str = ""):
         self.state = state
         self.stt = WhisperModel(stt_model_size, compute_type="int8_float16")
-        self.piper_bin = shutil.which("piper")
-        # For piper, you typically provide a model path
-        self.voice_model = tts_voice_model_path  # e.g., "/usr/share/piper/en_US-amy-low.onnx"
+        
+        # Initialize NeuTTS-Air
+        self.tts = None
+        self.tts_available = False
+        # Allow environment variables to override defaults
+        self.ref_audio_path = tts_ref_audio or os.getenv("TTS_REF_AUDIO", "")
+        self.ref_text = tts_ref_text or os.getenv("TTS_REF_TEXT", "")
+        self.ref_codes = None  # Pre-encoded reference for faster inference
+        
+        try:
+            from neuttsair.neutts import NeuTTSAir
+            import soundfile as sf
+            self.NeuTTSAir = NeuTTSAir
+            self.sf = sf
+            self.tts_available = True
+        except ImportError:
+            # NeuTTS-Air not installed
+            pass
 
     @staticmethod
     def spec():
@@ -34,13 +48,46 @@ class SpeechTool:
             transcript = "".join([seg.text for seg in segments])
             summary = f"Transcript: {transcript[:800]}"
         elif action == "speak" and text:
-            if self.piper_bin and self.voice_model:
-                # Output to file (could also pipe to playback)
-                out_path = "out.wav"
-                proc = subprocess.run([self.piper_bin, "--model", self.voice_model, "--output_file", out_path], input=text.encode("utf-8"))
-                summary = f"Spoken via Piper ({out_path})."
+            if self.tts_available:
+                # Initialize TTS model if not already done
+                if self.tts is None:
+                    try:
+                        self.tts = self.NeuTTSAir(
+                            backbone_repo="neuphonic/neutts-air",
+                            backbone_device="cpu",
+                            codec_repo="neuphonic/neucodec",
+                            codec_device="cpu"
+                        )
+                        
+                        # Pre-encode reference if available
+                        if self.ref_audio_path and os.path.exists(self.ref_audio_path):
+                            self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
+                            # Load reference text if it's a file path
+                            if self.ref_text and os.path.exists(self.ref_text):
+                                with open(self.ref_text, "r") as f:
+                                    self.ref_text = f.read().strip()
+                    except Exception as e:
+                        summary = f"NeuTTS-Air initialization failed: {str(e)}; printed text instead."
+                        delta = {"last_observation": summary}
+                        return {"summary": summary, "delta": delta}
+                
+                try:
+                    out_path = "out.wav"
+                    
+                    # Check if we have reference audio configured
+                    if self.ref_codes is not None and self.ref_text:
+                        # Generate speech with voice cloning
+                        wav = self.tts.infer(text, self.ref_codes, self.ref_text)
+                        self.sf.write(out_path, wav, 24000)
+                        summary = f"Spoken via NeuTTS-Air ({out_path})."
+                    else:
+                        # No reference configured - inform user
+                        summary = "NeuTTS-Air requires reference audio and text for voice cloning. Configure tts_ref_audio and tts_ref_text parameters. Text printed instead."
+                    
+                except Exception as e:
+                    summary = f"NeuTTS-Air failed: {str(e)}; printed text instead."
             else:
-                summary = "Piper not installed or voice model missing; printed text instead."
+                summary = "NeuTTS-Air not installed; printed text instead."
         else:
             summary = "Invalid speech action/args."
         delta = {"last_observation": summary}

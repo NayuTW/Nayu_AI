@@ -30,9 +30,35 @@ pip install -r requirements.txt
 # Playwright browser
 playwright install chromium
 
-# Optional TTS: Piper (install via your package manager), and a voice model.
-# Example (varies by distro): sudo pacman -S piper-tts  (Arch-based)
+# Optional TTS: Install espeak (required by NeuTTS-Air), then install NeuTTS-Air dependencies.
+# Example (varies by distro): 
+# Ubuntu/Debian: sudo apt install espeak
+# Arch-based: sudo pacman -S espeak
+# Mac OS: brew install espeak
 ```
+
+## Configuring NeuTTS-Air for Voice Synthesis
+
+NeuTTS-Air provides state-of-the-art voice cloning. To use TTS features:
+
+1. **Reference audio is required** for voice cloning. Prepare:
+   - A 3-15 second mono .wav file (16-44 kHz sample rate)
+   - Clear, natural speech with minimal background noise
+   - A text file with the exact transcript
+
+2. **Configure via environment variables**:
+   ```bash
+   export TTS_REF_AUDIO=/path/to/reference.wav
+   export TTS_REF_TEXT=/path/to/transcript.txt
+   # Or provide text directly:
+   export TTS_REF_TEXT="The exact transcript of the reference audio"
+   ```
+
+3. **Example reference files** are available in the [NeuTTS-Air samples](https://github.com/neuphonic/neutts-air/tree/main/samples).
+
+Without reference audio configured, the speech tool will print text instead of generating audio.
+
+For detailed TTS setup instructions, see [docs/TTS_SETUP.md](docs/TTS_SETUP.md).
 
 Start services (dashboard binds 0.0.0.0 by default so your host can access the VM’s dashboard):
 ```bash
@@ -60,7 +86,7 @@ virsh net-dhcp-leases default
   - intfloat/e5-small-v2 or BAAI/bge-small-en-v1.5 or all-MiniLM-L6-v2
 - Speech:
   - STT: faster-whisper small.en (streaming capable)
-  - TTS: Piper with a local voice
+  - TTS: NeuTTS-Air with instant voice cloning (requires reference audio)
 
 ## Features
 
@@ -122,6 +148,8 @@ virsh net-dhcp-leases default
 
 - AGENT_DASH_HOST: default 0.0.0.0 (bind address)
 - AGENT_DASH_PORT: default 8008
+- TTS_REF_AUDIO: path to reference audio file for NeuTTS-Air voice cloning (optional)
+- TTS_REF_TEXT: text content or path to text file for the reference audio (optional)
 
 ## Safety
 
