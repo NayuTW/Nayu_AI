@@ -54,7 +54,7 @@ async def main():
     print("Agent + Dashboard running (VM) at http://<vm-ip>:8008")
     print("Type 'voice on' or 'voice off' to toggle voice; 'quit' to exit.")
     while True:
-        user = input("You: ")
+        user = await asyncio.to_thread(input,"You: ")
         if user.strip().lower() == "quit":
             break
         if user.strip().lower() == "voice on":

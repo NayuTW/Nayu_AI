@@ -1,16 +1,16 @@
 import torch
 from typing import Dict, Any
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
 class VisionTool:
     def __init__(self, state, model_id: str = "Qwen/Qwen2-VL-2B-Instruct"):
         self.state = state
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        self.model = AutoModelForCausalLM.from_pretrained(
+        self.model = AutoModelForImageTextToText.from_pretrained(
             model_id,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            dtype=torch.float16 if self.device == "cuda" else torch.float32,
             load_in_4bit=True if self.device == "cuda" else False,
             device_map="auto",
             trust_remote_code=True

@@ -31,10 +31,10 @@ dirs:
 	mkdir -p .cache .chroma workspace src/dashboard/static/exports
 
 # Optional: pull example models with Ollama (requires Ollama installed and running on the VM)
-.PHONY: pull-models
-pull-models:
-	-ollama pull qwen2:7b-instruct-q5_K_M
-	-ollama pull llama3.1:8b-instruct-q4_K_M
+#.PHONY: pull-models
+#pull-models:
+#	-ollama pull qwen2:7b-instruct-q5_K_M
+#	-ollama pull llama3.1:8b-instruct-q4_K_M
 
 # Run the app (dashboard will bind to AGENT_DASH_HOST:AGENT_DASH_PORT)
 .PHONY: run

@@ -172,26 +172,27 @@ class MarkdownBrowserTool(Tool):
     )
     inputs = {
         "action": {"type": "string", "enum": ["search", "fetch", "browse"], "description": "Operation"},
-        "query": {"type": "string", "description": "Search query for 'search' or 'browse'"},
-        "url": {"type": "string", "description": "Target URL for 'fetch'"},
-        "mode": {"type": "string", "enum": ["auto", "static", "dynamic"], "default": "auto"},
-        "max_results": {"type": "integer", "default": 5},
-        "top_k": {"type": "integer", "default": 3},
-        "depth": {"type": "integer", "default": 1},
-        "per_page_char_budget": {"type": "integer", "default": 1200},
-        "domain_whitelist": {"type": "string", "description": "Comma-separated allowed domains (optional)"},
+        "query": {"type": "string", "description": "Search query for 'search' or 'browse'", "nullable": True},
+        "url": {"type": "string", "description": "Target URL for 'fetch'", "nullable": True},
+        "mode": {"type": "string", "description": "mode of URL handling", "enum": ["auto", "static", "dynamic"], "default": "auto", "nullable": False},
+        "max_results": {"type": "integer", "description": "maxiumum number of results", "default": 5, "nullable": True},
+        "top_k": {"type": "integer", "description": "k highest ranking items", "default": 3, "nullable": True},
+        "depth": {"type": "integer", "description": "number of clicks from a website's home page", "default": 1, "nullable": True},
+        "per_page_char_budget": {"type": "integer", "description": "character budget per page", "default": 1200, "nullable": True},
+        "domain_whitelist": {"type": "string", "description": "Comma-separated allowed domains (optional)", "nullable": True},
     }
     outputs = {
         "summary": {"type": "string"},
         "sources": {"type": "array", "items": {"type": "object"}},
         "markdown": {"type": "string"},
     }
+    output_type = "string"
 
     def forward(
         self,
         action: str,
-        query: str = "",
-        url: str = "",
+        query: Optional[str] = None,
+        url: Optional[str] = None,
         mode: str = "auto",
         max_results: int = 5,
         top_k: int = 3,

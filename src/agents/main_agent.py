@@ -18,7 +18,9 @@ from src.agents.tools.codeagent import CodeAgentTool
 
 SYSTEM_PROMPT = """You are the orchestrator. Think step-by-step. Use tools when helpful.
 Maintain awareness by updating and reading the shared state summary, not raw logs.
-Return concise answers. Prefer structured JSON tool calls with minimal arguments."""
+Return concise answers. Prefer structured JSON tool calls with minimal arguments.
+When calling tools, always include all required parameters from the tool schema.
+For the ‘speech’ tool, you MUST include the ‘action’ field set to ‘speak’ (with ‘text’) or ‘transcribe’ (with ‘path’)."""
 
 class MainAgent:
     def __init__(self, state: SharedState, bus: EventBus, registry: ToolRegistry, notifier: Notifier, store: SQLiteStore, session_id: str):

@@ -16,6 +16,7 @@ class GetUrlTool(Tool):
     description = "Fetch the HTML of a URL and return text. Prefer using md_browser.fetch/browse for content extraction."
     inputs = {"url": {"type": "string", "description": "URL to fetch"}}
     outputs = {"text": {"type": "string", "description": "Raw HTML text (truncated)"}}
+    output_type = "string"
 
     def forward(self, url: str) -> Dict[str, str]:
         import requests
@@ -28,8 +29,9 @@ class GetUrlTool(Tool):
 class WriteFileTool(Tool):
     name = "write_file"
     description = "Write content to a file within the ./workspace directory."
-    inputs = {"path": {"type": "string"}, "content": {"type": "string"}}
+    inputs = {"path": {"type": "string", "description": "path of the file that will be written to"}, "content": {"type": "string", "description": "content that will be written to the file"}}
     outputs = {"path": {"type": "string"}}
+    output_type = "string"
 
     def forward(self, path: str, content: str) -> Dict[str, str]:
         import os
@@ -78,8 +80,6 @@ class CodeAgentTool:
             tools=self.allowed_tools,
             model=self.model,
             max_steps=max_steps,
-            run_result_as_string=True,
-            system_prompt=sys_prompt,
         )
         self.guard_allowed_imports = set(allowed_imports or [
             "math","re","json","time","datetime","statistics","itertools","functools","collections","typing","hashlib","base64","html","urllib",
@@ -127,7 +127,8 @@ class CodeAgentTool:
             ):
                 try:
                     start = time.time()
-                    final_prompt = prompt if not hints_ else f"{prompt}\n\nHints/Constraints:\n{hints_}"
+                    final_prompt_body = prompt if not hints_ else f"{prompt}\n\nHints/Constraints:\n{hints_}"
+                    final_prompt = (self.sys_prompt + "\n\n" + final_prompt_body) if self.sys_prompt else final_prompt_body
                     result = self.agent.run(final_prompt)
                     elapsed = time.time() - start
                     q_.put({"ok": True, "result": (result or "").strip(), "elapsed": elapsed})
