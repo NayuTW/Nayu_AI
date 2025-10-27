@@ -6,7 +6,7 @@ class SmolOllamaModel:
     Minimal smolagents-compatible model wrapper for Ollama.
     """
 
-    def __init__(self, model: str = "qwen2:7b-instruct-q5_K_M", num_ctx: int = 12000, temperature: float = 0.2):
+    def __init__(self, model: str = "llama3.1:8b-instruct-q4_K_M", num_ctx: int = 12000, temperature: float = 0.2):
         self.model = model
         self.num_ctx = num_ctx
         self.temperature = temperature

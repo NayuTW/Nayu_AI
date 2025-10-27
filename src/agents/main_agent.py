@@ -30,7 +30,7 @@ class MainAgent:
         self.notifier = notifier
         self.store = store
         self.session_id = session_id
-        self.llm = OllamaLLM(model="qwen2:7b-instruct-q5_K_M", json_mode=True, num_ctx=12000)
+        self.llm = OllamaLLM(model="llama3.1:8b-instruct-q4_K_M", json_mode=True, num_ctx=12000)
 
         web = WebTool(state)
         desktop = DesktopTool(state)
