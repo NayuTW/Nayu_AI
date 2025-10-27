@@ -61,32 +61,25 @@ def test_speech_file_structure():
         if isinstance(node, ast.FunctionDef) and node.name == "_encode_reference_audio":
             print(f"  ✅ Found _encode_reference_audio method with {len(node.body)} statements")
             
-            # Check for proper branching
-            has_if_pt = False
-            has_if_onnx = False
-            has_else = False
+            # Get the method source code for simpler string-based checks
+            method_start = node.lineno - 1
+            method_lines = content.split('\n')[method_start:]
+            method_source = '\n'.join(method_lines[:70])  # Get enough lines to cover the whole method
             
-            for item in ast.walk(node):
-                if isinstance(item, ast.If):
-                    # Check for .pt check
-                    if isinstance(item.test, ast.Compare):
-                        has_if_pt = True
-                    # Check for ONNX check
-                    if isinstance(item.test, ast.BoolOp) or (
-                        hasattr(item.test, 'func') and 
-                        hasattr(item.test.func, 'attr') and 
-                        'hasattr' in str(item.test.func)
-                    ):
-                        has_if_onnx = True
-                if isinstance(item, ast.If) and item.orelse:
-                    has_else = True
+            # Check for key branching logic
+            has_pt_check = ".pt" in method_source and "suffix" in method_source
+            has_onnx_check = "_is_onnx_codec" in method_source
+            has_encoder_creation = "NeuCodec.from_pretrained" in method_source
+            has_fallback = "self.tts.encode_reference(" in method_source
             
-            if has_if_pt:
+            if has_pt_check:
                 print("  ✅ Has conditional check for .pt files")
-            if has_if_onnx:
+            if has_onnx_check:
                 print("  ✅ Has conditional check for ONNX decoder")
-            if has_else:
-                print("  ✅ Has else branch for fallback logic")
+            if has_encoder_creation:
+                print("  ✅ Creates separate encoder for ONNX mode")
+            if has_fallback:
+                print("  ✅ Has fallback to built-in encode_reference")
     
     print("\n" + ("="*60))
     if all_passed:
