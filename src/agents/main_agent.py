@@ -9,7 +9,7 @@ from src.agents.core.registry import ToolRegistry
 from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
 
-from src.agents.tools.web import WebTool
+from src.agents.tools.webbrowser import WebBrowserTool
 from src.agents.tools.desktop import DesktopTool
 from src.agents.tools.vision import VisionTool
 from src.agents.tools.memory import MemoryTool
@@ -32,14 +32,14 @@ class MainAgent:
         self.session_id = session_id
         self.llm = OllamaLLM(model="llama3.1:8b-instruct-q4_K_M", json_mode=True, num_ctx=12000)
 
-        web = WebTool(state)
+        webbrowser = WebBrowserTool(state)
         desktop = DesktopTool(state)
         vision = VisionTool(state)
         memory = MemoryTool(state)
         speech = SpeechTool(state)
         codeexec = CodeAgentTool(state)
 
-        self.registry.register("web", web, WebTool.spec())
+        self.registry.register("webbrowser", webbrowser, WebBrowserTool.spec())
         self.registry.register("desktop", desktop, DesktopTool.spec())
         self.registry.register("vision", vision, VisionTool.spec())
         self.registry.register("memory", memory, MemoryTool.spec())

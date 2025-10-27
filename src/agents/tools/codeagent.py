@@ -8,12 +8,12 @@ import sys
 from smolagents import CodeAgent, Tool
 
 from src.agents.llm.smol_ollama_model import SmolOllamaModel
-from src.agents.tools.md_browser import MarkdownBrowserTool
+from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
 from src.agents.sandbox.guardrails import GuardedEnv
 
 class GetUrlTool(Tool):
     name = "get_url"
-    description = "Fetch the HTML of a URL and return text. Prefer using md_browser.fetch/browse for content extraction."
+    description = "Fetch the HTML of a URL and return text. Prefer using webbrowser tool with fetch/browse actions for better content extraction."
     inputs = {"url": {"type": "string", "description": "URL to fetch"}}
     outputs = {"text": {"type": "string", "description": "Raw HTML text (truncated)"}}
     output_type = "string"
@@ -67,15 +67,16 @@ class CodeAgentTool:
         self.state = state
         self.model = model or SmolOllamaModel()
         self.allowed_tools = allowed_tools or [
-            MarkdownBrowserTool(),
+            WebBrowserSmolTool(),
             GetUrlTool(),
             WriteFileTool(),
         ]
         sys_prompt = system_prompt or textwrap.dedent("""
             You are a focused Python agent that solves the user's GOAL using the provided tools.
-            Prefer md_browser for web research and return concise summaries with citations.
+            Prefer webbrowser for web research and return concise summaries with citations.
             Keep loops short. End by printing a brief final summary.
         """)
+        self.sys_prompt = sys_prompt
         self.agent = CodeAgent(
             tools=self.allowed_tools,
             model=self.model,
@@ -87,7 +88,7 @@ class CodeAgentTool:
         ])
         self.guard_allow_open_readonly = allow_open_readonly
         self.guard_open_read_roots = open_read_roots or ["./workspace"]
-        self.guard_network_allowed_callers = network_allowed_callers or ["agents.tools.md_browser"]
+        self.guard_network_allowed_callers = network_allowed_callers or ["agents.tools.webbrowser", "agents.tools.webbrowser_smol"]
         self.guard_step_limit = step_limit
         self.guard_print_line_limit = print_line_limit
         self.guard_print_byte_limit = print_byte_limit
