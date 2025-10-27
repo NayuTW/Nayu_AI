@@ -208,3 +208,7 @@ __marimo__/
 
 # TTS output files (exclude generated audio but keep sample reference files)
 /out.wav
+
+# Backup files
+*.bak
+*.old
