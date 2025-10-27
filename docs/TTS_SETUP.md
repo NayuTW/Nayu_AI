@@ -93,19 +93,43 @@ Configure the reference audio by setting environment variables before starting t
 
 **Linux/macOS:**
 ```bash
+# Option 1: Use .wav file (auto-encodes if neucodec is installed)
 export TTS_REF_AUDIO=/path/to/reference.wav
 export TTS_REF_TEXT=/path/to/reference.txt
+
+# Option 2: Use pre-encoded .pt file (recommended for ONNX decoder)
+export TTS_REF_AUDIO=/path/to/reference.pt
+export TTS_REF_TEXT=/path/to/reference.txt
+
 # Or provide the text directly:
 export TTS_REF_TEXT="My name is Dave, and um, I'm from London."
 ```
 
 **Windows:**
 ```powershell
-$env:TTS_REF_AUDIO="C:\path\to\reference.wav"
+$env:TTS_REF_AUDIO="C:\path\to\reference.wav"  # or .pt
 $env:TTS_REF_TEXT="C:\path\to\reference.txt"
 # Or:
 $env:TTS_REF_TEXT="My name is Dave, and um, I'm from London."
 ```
+
+### Pre-encoding Reference Audio (Recommended)
+
+For best performance with the ONNX decoder, pre-encode your reference audio:
+
+```bash
+# Encode a .wav file to .pt format
+python examples/encode_reference.py samples/dave.wav samples/dave-encoded.pt
+
+# Then use the encoded file
+export TTS_REF_AUDIO=samples/dave-encoded.pt
+export TTS_REF_TEXT=samples/dave.txt
+```
+
+Benefits of pre-encoding:
+- Faster initialization (no need to load full encoder at runtime)
+- Smaller memory footprint
+- Works seamlessly with ONNX decoder
 
 ## Sample Reference Files
 
@@ -115,14 +139,18 @@ You can download sample reference files from the NeuTTS-Air repository:
 # Clone the NeuTTS-Air repository (optional, just for samples)
 git clone https://github.com/neuphonic/neutts-air.git /tmp/neutts-air-samples
 
-# Use the sample files
+# Option 1: Use pre-encoded files (fastest)
+export TTS_REF_AUDIO=/tmp/neutts-air-samples/samples/dave.pt
+export TTS_REF_TEXT=/tmp/neutts-air-samples/samples/dave.txt
+
+# Option 2: Use .wav files (auto-encodes with neucodec)
 export TTS_REF_AUDIO=/tmp/neutts-air-samples/samples/dave.wav
 export TTS_REF_TEXT=/tmp/neutts-air-samples/samples/dave.txt
 ```
 
 Available samples in the repository:
-- `samples/dave.wav` and `samples/dave.txt`
-- `samples/jo.wav` (no text file provided in original repo)
+- `samples/dave.wav`, `samples/dave.pt`, and `samples/dave.txt`
+- `samples/jo.wav`, `samples/jo.pt`, and `samples/jo.txt`
 
 ## Usage
 

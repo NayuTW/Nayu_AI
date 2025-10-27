@@ -48,17 +48,29 @@ NeuTTS-Air provides state-of-the-art voice cloning. To use TTS features:
 
 2. **Configure via environment variables**:
    ```bash
+   # Option 1: Use .wav file (requires neucodec for encoding)
    export TTS_REF_AUDIO=/path/to/reference.wav
    export TTS_REF_TEXT=/path/to/transcript.txt
+   
+   # Option 2: Use pre-encoded .pt file (faster, recommended for ONNX decoder)
+   export TTS_REF_AUDIO=/path/to/reference.pt
+   export TTS_REF_TEXT=/path/to/transcript.txt
+   
    # Or provide text directly:
    export TTS_REF_TEXT="The exact transcript of the reference audio"
    ```
 
-3. **Example reference files** are available in the [NeuTTS-Air samples](https://github.com/neuphonic/neutts-air/tree/main/samples).
+3. **Pre-encode reference audio** (optional but recommended for ONNX decoder):
+   ```bash
+   # Create a pre-encoded reference for faster loading
+   python examples/encode_reference.py input.wav output.pt
+   ```
+
+4. **Example reference files** are available in the [NeuTTS-Air samples](https://github.com/neuphonic/neutts-air/tree/main/samples).
 
 Without reference audio configured, the speech tool will print text instead of generating audio.
 
-For detailed TTS setup instructions, see [docs/TTS_SETUP.md](docs/TTS_SETUP.md).
+For detailed TTS setup instructions, troubleshooting, and ONNX decoder usage, see [docs/TTS_SETUP.md](docs/TTS_SETUP.md).
 
 Start services (dashboard binds 0.0.0.0 by default so your host can access the VM’s dashboard):
 ```bash
