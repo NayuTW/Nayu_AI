@@ -2,6 +2,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from faster_whisper import WhisperModel
 import os
+from pathlib import Path
 
 class SpeechTool:
     def __init__(self, state, stt_model_size="small.en", tts_ref_audio: str = "", tts_ref_text: str = ""):
@@ -11,6 +12,7 @@ class SpeechTool:
         # Initialize NeuTTS-Air
         self.tts = None
         self.tts_available = False
+        self.encoder_for_reference = None  # Separate encoder for ONNX decoder mode
         # Allow environment variables to override defaults
         self.ref_audio_path = tts_ref_audio or os.getenv("TTS_REF_AUDIO", "")
         self.ref_text = tts_ref_text or os.getenv("TTS_REF_TEXT", "")
@@ -41,6 +43,68 @@ class SpeechTool:
                 "required": ["action"]
             }
         }
+    
+    def _encode_reference_audio(self, ref_audio_path: str):
+        """
+        Encode reference audio to codes. Handles ONNX decoder scenario where 
+        a separate encoder is needed.
+        
+        Args:
+            ref_audio_path: Path to reference audio file or pre-encoded .pt file
+            
+        Returns:
+            Encoded reference codes (torch.Tensor or np.ndarray)
+        """
+        import torch
+        
+        ref_path = Path(ref_audio_path)
+        
+        # Check if it's a pre-encoded .pt file
+        if ref_path.suffix == '.pt':
+            try:
+                ref_codes = torch.load(ref_audio_path)
+                return ref_codes
+            except Exception as e:
+                raise ValueError(f"Failed to load pre-encoded reference from {ref_audio_path}: {e}")
+        
+        # Check if we're using ONNX decoder (which can't encode)
+        if hasattr(self.tts, '_is_onnx_codec') and self.tts._is_onnx_codec:
+            # ONNX decoder can't encode, need to use full encoder
+            if self.encoder_for_reference is None:
+                try:
+                    # Import neucodec for encoding
+                    from neucodec import NeuCodec
+                    import librosa
+                    
+                    # Create a separate encoder instance for reference encoding
+                    self.encoder_for_reference = NeuCodec.from_pretrained("neuphonic/neucodec")
+                    self.encoder_for_reference.eval()
+                    # Keep on CPU to save memory
+                    
+                except ImportError as e:
+                    raise ImportError(
+                        "When using ONNX decoder, you need either:\n"
+                        "1. Pre-encoded reference codes (.pt file), OR\n"
+                        "2. The 'neucodec' package installed for encoding.\n"
+                        f"Install with: pip install neucodec\nError: {e}"
+                    )
+            
+            # Encode using the full codec
+            try:
+                import librosa
+                wav, _ = librosa.load(ref_audio_path, sr=16000, mono=True)
+                wav_tensor = torch.from_numpy(wav).float().unsqueeze(0).unsqueeze(0)  # [1, 1, T]
+                with torch.no_grad():
+                    ref_codes = self.encoder_for_reference.encode_code(audio_or_path=wav_tensor).squeeze(0).squeeze(0)
+                return ref_codes
+            except Exception as e:
+                raise RuntimeError(f"Failed to encode reference audio with full codec: {e}")
+        else:
+            # Using full codec (PyTorch), can encode directly
+            try:
+                return self.tts.encode_reference(ref_audio_path)
+            except Exception as e:
+                raise RuntimeError(f"Failed to encode reference audio: {e}")
 
     async def run(self, action: str, path: str = "", text: str = "") -> Dict[str, Any]:
         if action == "transcribe" and path:
@@ -61,7 +125,13 @@ class SpeechTool:
                         
                         # Pre-encode reference if available
                         if self.ref_audio_path and os.path.exists(self.ref_audio_path):
-                            self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
+                            try:
+                                self.ref_codes = self._encode_reference_audio(self.ref_audio_path)
+                            except Exception as e:
+                                summary = f"Failed to encode reference audio: {str(e)}. Please check your reference audio configuration."
+                                delta = {"last_observation": summary}
+                                return {"summary": summary, "delta": delta}
+                            
                             # Load reference text if it's a file path
                             if self.ref_text and os.path.exists(self.ref_text):
                                 with open(self.ref_text, "r") as f:

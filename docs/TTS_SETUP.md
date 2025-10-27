@@ -172,6 +172,29 @@ print(result['summary'])
 - Verify Python dependencies are compatible versions
 - Check system resources (NeuTTS-Air requires some memory/compute)
 
+### "ONNX decoder can only decode not encode" or "Failed to encode reference audio"
+This error occurs when using the ONNX decoder codec with raw audio files. Solutions:
+
+1. **Use pre-encoded reference codes** (recommended):
+   ```bash
+   # Download samples with pre-encoded codes
+   git clone https://github.com/neuphonic/neutts-air.git /tmp/neutts-air-samples
+   export TTS_REF_AUDIO=/tmp/neutts-air-samples/samples/dave.pt
+   export TTS_REF_TEXT=/tmp/neutts-air-samples/samples/dave.txt
+   ```
+
+2. **Install neucodec for automatic encoding**:
+   ```bash
+   pip install neucodec
+   # Then use .wav files as usual - the system will auto-encode them
+   export TTS_REF_AUDIO=/path/to/reference.wav
+   ```
+
+3. **Switch to full PyTorch codec** (edit `speech.py`):
+   ```python
+   codec_repo="neuphonic/neucodec"  # instead of "neuphonic/neucodec-onnx-decoder"
+   ```
+
 ### Poor Audio Quality
 - Use higher quality reference audio (44 kHz vs 16 kHz)
 - Ensure reference audio has clear, natural speech
@@ -182,12 +205,27 @@ print(result['summary'])
 
 ### Using Different Models
 
-NeuTTS-Air supports different model variants. By default, the code uses:
-- Backbone: `neuphonic/neutts-air`
-- Codec: `neuphonic/neucodec`
-
-For faster inference with slightly lower quality, you can modify `speech.py` to use:
+NeuTTS-Air supports different model variants. The current implementation uses:
 - Backbone: `neuphonic/neutts-air-q4-gguf` (quantized, requires llama-cpp-python)
+- Codec: `neuphonic/neucodec-onnx-decoder` (ONNX decoder for efficient inference)
+
+**Important Note for ONNX Decoder:**
+The ONNX decoder (`neuphonic/neucodec-onnx-decoder`) can only decode audio, not encode it. When using this codec, you have two options for reference audio:
+
+1. **Option 1: Use pre-encoded reference codes** (fastest)
+   - Download pre-encoded `.pt` files from the NeuTTS-Air samples
+   - Set `TTS_REF_AUDIO` to point to the `.pt` file instead of `.wav`
+   - Example: `export TTS_REF_AUDIO=/tmp/neutts-air-samples/samples/dave.pt`
+
+2. **Option 2: Auto-encode with full codec** (requires neucodec package)
+   - The system will automatically load the full `neuphonic/neucodec` encoder when needed
+   - Simply point `TTS_REF_AUDIO` to a `.wav` file as usual
+   - The full encoder is only used once to encode the reference, then cached
+   - Requires: `pip install neucodec` (already in requirements.txt)
+
+For alternative configurations:
+- Full PyTorch backbone: `neuphonic/neutts-air` (larger but no llama-cpp-python needed)
+- Full PyTorch codec: `neuphonic/neucodec` (can both encode and decode)
 
 ### GPU Acceleration
 
@@ -198,9 +236,11 @@ By default, the system runs on CPU. To use GPU acceleration:
 
 ## Performance Tips
 
-1. **Pre-encode references**: The system automatically pre-encodes reference audio on first use for faster subsequent inference
-2. **Use GGUF models**: For on-device deployment, consider using quantized GGUF models
-3. **Adjust model size**: Smaller models are faster but may have lower quality
+1. **Pre-encode references**: When using ONNX decoder, pre-encoded `.pt` files are fastest
+2. **Use GGUF models**: Quantized GGUF models provide the best size/speed tradeoff
+3. **Use ONNX decoder**: The ONNX decoder is faster and smaller than the full PyTorch codec
+4. **Cache reference codes**: The system automatically caches encoded references for faster subsequent use
+5. **Adjust model size**: Smaller models are faster but may have lower quality
 
 ## Resources
 

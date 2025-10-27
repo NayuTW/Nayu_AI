@@ -6,8 +6,12 @@ Before running this script:
 1. Install espeak: sudo apt install espeak (or equivalent for your OS)
 2. Install dependencies: pip install -r requirements.txt
 3. Set environment variables:
-   export TTS_REF_AUDIO=/path/to/reference.wav
+   export TTS_REF_AUDIO=/path/to/reference.wav  (or reference.pt for ONNX decoder)
    export TTS_REF_TEXT=/path/to/reference.txt (or the text content)
+
+Note: When using ONNX decoder (default), you can use either:
+  - Pre-encoded .pt files (fastest): export TTS_REF_AUDIO=/path/to/reference.pt
+  - Raw .wav files (requires neucodec): export TTS_REF_AUDIO=/path/to/reference.wav
 
 Usage:
     python examples/tts_example.py "Text to speak"
