@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from typing import Optional
 import aiohttp
 
 # System prompt for tool-calling mode
@@ -22,7 +23,7 @@ class OllamaLLM:
         self.temperature = temperature
         self.url = "http://localhost:11434/api/chat"
 
-    def _find_json_object(self, content: str, start_pos: int):
+    def _find_json_object(self, content: str, start_pos: int) -> Optional[str]:
         """
         Find a complete JSON object starting at the given position by counting braces.
         Returns the JSON string if valid, None otherwise.
@@ -60,7 +61,7 @@ class OllamaLLM:
         
         return None
 
-    def _extract_json(self, content: str):
+    def _extract_json(self, content: str) -> dict:
         """
         Extract JSON from model output, handling cases where the model includes
         explanatory text before/after the JSON structure.
