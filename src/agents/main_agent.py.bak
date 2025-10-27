@@ -20,8 +20,7 @@ SYSTEM_PROMPT = """You are the orchestrator. Think step-by-step. Use tools when 
 Maintain awareness by updating and reading the shared state summary, not raw logs.
 Return concise answers. Prefer structured JSON tool calls with minimal arguments.
 When calling tools, always include all required parameters from the tool schema.
-For the ‘speech’ tool, you MUST include the ‘action’ field set to ‘speak’ (with ‘text’) or ‘transcribe’ (with ‘path’).
-For the 'webbrowser' tool, use actions: 'search' (web search), 'fetch' (extract URL), 'browse' (multi-source research), 'goto' (navigate), or 'interact' (automation)."""
+For the ‘speech’ tool, you MUST include the ‘action’ field set to ‘speak’ (with ‘text’) or ‘transcribe’ (with ‘path’)."""
 
 class MainAgent:
     def __init__(self, state: SharedState, bus: EventBus, registry: ToolRegistry, notifier: Notifier, store: SQLiteStore, session_id: str):
