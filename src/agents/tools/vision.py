@@ -20,24 +20,40 @@ class VisionTool:
     def spec():
         return {
             "name": "vision",
-            "description": "Describe an image (e.g., a screenshot) or read text from it.",
+            "description": "Describe an image (e.g., a screenshot) or read text from it. Requires the full path to the image file. After taking a screenshot with desktop tool, use the returned path or check state.extra['last_screenshot_path'].",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string"},
-                    "prompt": {"type": "string"}
+                    "path": {"type": "string", "description": "Full path to the image file (e.g., '.cache/screenshot_1234567890.png')"},
+                    "prompt": {"type": "string", "description": "Custom prompt for image analysis (optional)"}
                 },
                 "required": ["path"]
             }
         }
 
     async def run(self, path: str, prompt: str = "Describe the image briefly with actionable details.") -> Dict[str, Any]:
+        # Validate path parameter
+        if not path or not path.strip():
+            raise ValueError("path parameter is required and cannot be empty")
+        
+        # Check if file exists
+        import os
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Image file not found: {path}")
+        
         image = Image.open(path).convert("RGB")
         inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
         with torch.inference_mode():
             out = self.model.generate(**inputs, max_new_tokens=256)
-        text = self.processor.batch_decode(out, skip_special_tokens=True)[0]
-        text = text.split(prompt, 1)[-1].strip() if prompt in text else text
+        
+        # Safe decoding with validation
+        decoded = self.processor.batch_decode(out, skip_special_tokens=True)
+        if not decoded or len(decoded) == 0:
+            text = "Unable to process image - model returned empty output"
+        else:
+            text = decoded[0]
+            text = text.split(prompt, 1)[-1].strip() if prompt in text else text
+        
         summary = f"Vision: {text[:800]}"
         delta = {"last_observation": summary}
         return {"summary": summary, "delta": delta}
