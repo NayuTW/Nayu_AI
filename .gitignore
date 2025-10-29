@@ -212,3 +212,9 @@ __marimo__/
 # Backup files
 *.bak
 *.old
+
+# Neuttsair code
+neuttsair/
+
+# .chroma
+.chroma/
