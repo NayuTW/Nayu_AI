@@ -9,7 +9,7 @@ from src.agents.core.registry import ToolRegistry
 from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
 
-from src.agents.tools.web import WebTool
+from src.agents.tools.webbrowser import WebBrowserTool
 from src.agents.tools.desktop import DesktopTool
 from src.agents.tools.vision import VisionTool
 from src.agents.tools.memory import MemoryTool
@@ -20,7 +20,8 @@ SYSTEM_PROMPT = """You are the orchestrator. Think step-by-step. Use tools when 
 Maintain awareness by updating and reading the shared state summary, not raw logs.
 Return concise answers. Prefer structured JSON tool calls with minimal arguments.
 When calling tools, always include all required parameters from the tool schema.
-For the ‘speech’ tool, you MUST include the ‘action’ field set to ‘speak’ (with ‘text’) or ‘transcribe’ (with ‘path’)."""
+For the ‘speech’ tool, you MUST include the ‘action’ field set to ‘speak’ (with ‘text’) or ‘transcribe’ (with ‘path’).
+For the 'webbrowser' tool, use actions: 'search' (web search), 'fetch' (extract URL), 'browse' (multi-source research), 'goto' (navigate), or 'interact' (automation)."""
 
 class MainAgent:
     def __init__(self, state: SharedState, bus: EventBus, registry: ToolRegistry, notifier: Notifier, store: SQLiteStore, session_id: str):
@@ -32,14 +33,14 @@ class MainAgent:
         self.session_id = session_id
         self.llm = OllamaLLM(model="llama3.1:8b-instruct-q4_K_M", json_mode=True, num_ctx=12000)
 
-        web = WebTool(state)
+        webbrowser = WebBrowserTool(state)
         desktop = DesktopTool(state)
         vision = VisionTool(state)
         memory = MemoryTool(state)
         speech = SpeechTool(state)
         codeexec = CodeAgentTool(state)
 
-        self.registry.register("web", web, WebTool.spec())
+        self.registry.register("webbrowser", webbrowser, WebBrowserTool.spec())
         self.registry.register("desktop", desktop, DesktopTool.spec())
         self.registry.register("vision", vision, VisionTool.spec())
         self.registry.register("memory", memory, MemoryTool.spec())
