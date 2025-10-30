@@ -52,79 +52,98 @@ class SpeechTool:
         }
 
     async def run(self, action: str, path: str = "", text: str = "") -> Dict[str, Any]:
-        if action == "transcribe" and path:
-            segments, info = self.stt.transcribe(path, beam_size=1, vad_filter=True)
-            transcript = "".join([seg.text for seg in segments])
-            summary = f"Transcript: {transcript[:800]}"
-        elif action == "speak" and text:
-            if self.tts_available:
-                # Initialize TTS model if not already done
-                if self.tts is None:
+        try:
+            print(f"[DEBUG] SpeechTool.run() called with action='{action}', text='{text[:50] if text else '(empty)'}', path='{path}'")
+            summary = ""  # Initialize summary to avoid UnboundLocalError
+            
+            if action == "transcribe" and path:
+                segments, info = self.stt.transcribe(path, beam_size=1, vad_filter=True)
+                transcript = "".join([seg.text for seg in segments])
+                summary = f"Transcript: {transcript[:800]}"
+            elif action == "speak" and text:
+                if self.tts_available:
+                    # Initialize TTS model if not already done
+                    if self.tts is None:
+                        try:
+                            print(f"Initializing NeuTTS-Air TTS engine...")
+                            self.tts = self.NeuTTSAir(
+                                backbone_repo="neuphonic/neutts-air-q4-gguf",
+                                backbone_device="cpu",
+                                codec_repo="neuphonic/neucodec-onnx-decoder",
+                                codec_device="cpu"
+                            )
+                            print(f"✓ TTS engine initialized")
+                            
+                            # Pre-encode reference if available
+                            if self.ref_audio_path and os.path.exists(self.ref_audio_path):
+                                print(f"Encoding reference audio: {self.ref_audio_path}")
+                                self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
+                                print(f"✓ Reference audio encoded successfully")
+                                # Load reference text if it's a file path
+                                if self.ref_text and os.path.exists(self.ref_text):
+                                    with open(self.ref_text, "r") as f:
+                                        self.ref_text = f.read().strip()
+                                    print(f"✓ Reference text loaded: {len(self.ref_text)} characters")
+                        except Exception as e:
+                            # Print the text as fallback with detailed error info
+                            print(f"\n✗ NeuTTS-Air initialization failed!")
+                            print(f"  Error type: {type(e).__name__}")
+                            print(f"  Error message: {str(e)}")
+                            import traceback
+                            print(f"  Traceback:\n{traceback.format_exc()}")
+                            print(f"[TTS FALLBACK] {text}")
+                            summary = f"NeuTTS-Air initialization failed: {type(e).__name__}: {str(e)}. Text printed to console instead."
+                            delta = {"last_observation": summary}
+                            return {"summary": summary, "delta": delta}
+                    
                     try:
-                        print(f"Initializing NeuTTS-Air TTS engine...")
-                        self.tts = self.NeuTTSAir(
-                            backbone_repo="neuphonic/neutts-air-q4-gguf",
-                            backbone_device="cpu",
-                            codec_repo="neuphonic/neucodec-onnx-decoder",
-                            codec_device="cpu"
-                        )
-                        print(f"✓ TTS engine initialized")
+                        out_path = "out.wav"
                         
-                        # Pre-encode reference if available
-                        if self.ref_audio_path and os.path.exists(self.ref_audio_path):
-                            print(f"Encoding reference audio: {self.ref_audio_path}")
-                            self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
-                            print(f"✓ Reference audio encoded successfully")
-                            # Load reference text if it's a file path
-                            if self.ref_text and os.path.exists(self.ref_text):
-                                with open(self.ref_text, "r") as f:
-                                    self.ref_text = f.read().strip()
-                                print(f"✓ Reference text loaded: {len(self.ref_text)} characters")
+                        # Check if we have reference audio configured
+                        if self.ref_codes is not None and self.ref_text:
+                            # Generate speech with voice cloning
+                            print(f"Generating speech with NeuTTS-Air...")
+                            wav = self.tts.infer(text, self.ref_codes, self.ref_text)
+                            self.sf.write(out_path, wav, 24000)
+                            print(f"✓ Audio generated: {out_path}")
+                            summary = f"Spoken via NeuTTS-Air ({out_path})."
+                        else:
+                            # No reference configured - print text as fallback
+                            print(f"\n⚠ Reference audio not available:")
+                            print(f"  - ref_codes: {'Set' if self.ref_codes is not None else 'NOT SET'}")
+                            print(f"  - ref_text: {'Set' if self.ref_text else 'NOT SET'}")
+                            print(f"[TTS FALLBACK] {text}")
+                            summary = "NeuTTS-Air requires reference audio and text for voice cloning. Configure TTS_REF_AUDIO and TTS_REF_TEXT environment variables. Text printed to console instead."
+                        
                     except Exception as e:
                         # Print the text as fallback with detailed error info
-                        print(f"\n✗ NeuTTS-Air initialization failed!")
+                        print(f"\n✗ NeuTTS-Air inference failed!")
                         print(f"  Error type: {type(e).__name__}")
                         print(f"  Error message: {str(e)}")
                         import traceback
                         print(f"  Traceback:\n{traceback.format_exc()}")
                         print(f"[TTS FALLBACK] {text}")
-                        summary = f"NeuTTS-Air initialization failed: {type(e).__name__}: {str(e)}. Text printed to console instead."
-                        delta = {"last_observation": summary}
-                        return {"summary": summary, "delta": delta}
-                
-                try:
-                    out_path = "out.wav"
-                    
-                    # Check if we have reference audio configured
-                    if self.ref_codes is not None and self.ref_text:
-                        # Generate speech with voice cloning
-                        print(f"Generating speech with NeuTTS-Air...")
-                        wav = self.tts.infer(text, self.ref_codes, self.ref_text)
-                        self.sf.write(out_path, wav, 24000)
-                        print(f"✓ Audio generated: {out_path}")
-                        summary = f"Spoken via NeuTTS-Air ({out_path})."
-                    else:
-                        # No reference configured - print text as fallback
-                        print(f"\n⚠ Reference audio not available:")
-                        print(f"  - ref_codes: {'Set' if self.ref_codes is not None else 'NOT SET'}")
-                        print(f"  - ref_text: {'Set' if self.ref_text else 'NOT SET'}")
-                        print(f"[TTS FALLBACK] {text}")
-                        summary = "NeuTTS-Air requires reference audio and text for voice cloning. Configure TTS_REF_AUDIO and TTS_REF_TEXT environment variables. Text printed to console instead."
-                    
-                except Exception as e:
-                    # Print the text as fallback with detailed error info
-                    print(f"\n✗ NeuTTS-Air inference failed!")
-                    print(f"  Error type: {type(e).__name__}")
-                    print(f"  Error message: {str(e)}")
-                    import traceback
-                    print(f"  Traceback:\n{traceback.format_exc()}")
+                        summary = f"NeuTTS-Air inference failed: {type(e).__name__}: {str(e)}. Text printed to console instead."
+                else:
+                    # Print the text as fallback
                     print(f"[TTS FALLBACK] {text}")
-                    summary = f"NeuTTS-Air inference failed: {type(e).__name__}: {str(e)}. Text printed to console instead."
+                    summary = "NeuTTS-Air not installed. Install neutts-air package and dependencies (see docs/TTS_SETUP.md). Text printed to console instead."
             else:
-                # Print the text as fallback
+                print(f"[DEBUG] Invalid speech action or missing args: action='{action}', path='{path}', text='{text[:30] if text else '(empty)'}'")
+                summary = "Invalid speech action/args."
+            
+            print(f"[DEBUG] SpeechTool.run() returning summary: {summary[:100]}")
+            delta = {"last_observation": summary}
+            return {"summary": summary, "delta": delta}
+        except Exception as e:
+            # Catch-all exception handler to ensure we always return something
+            print(f"\n✗✗✗ UNEXPECTED ERROR in SpeechTool.run()!")
+            print(f"  Error type: {type(e).__name__}")
+            print(f"  Error message: {str(e)}")
+            import traceback
+            print(f"  Traceback:\n{traceback.format_exc()}")
+            if action == "speak" and text:
                 print(f"[TTS FALLBACK] {text}")
-                summary = "NeuTTS-Air not installed. Install neutts-air package and dependencies (see docs/TTS_SETUP.md). Text printed to console instead."
-        else:
-            summary = "Invalid speech action/args."
-        delta = {"last_observation": summary}
-        return {"summary": summary, "delta": delta}
+            summary = f"Speech tool error: {type(e).__name__}: {str(e)}"
+            delta = {"last_observation": summary}
+            return {"summary": summary, "delta": delta}
