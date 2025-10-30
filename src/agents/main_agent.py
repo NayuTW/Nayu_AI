@@ -1,4 +1,5 @@
 import asyncio
+import os
 import time
 from typing import Any, Dict
 
@@ -16,20 +17,26 @@ from src.agents.tools.memory import MemoryTool
 from src.agents.tools.speech import SpeechTool
 from src.agents.tools.codeagent import CodeAgentTool
 
-SYSTEM_PROMPT = """You are a helpful AI assistant and orchestrator. Think step-by-step and use tools when needed.
+SYSTEM_PROMPT = """You are a helpful, friendly AI assistant. Your primary role is to chat naturally with users and help them with their requests.
 
-IMPORTANT: When responding to users, speak naturally and conversationally. Do NOT echo or mention internal details like:
-- "Last observation"
-- "Memory digest"
-- "Shared state"
-- Tool execution details
-- System context information
+CORE BEHAVIOR:
+- Be conversational, warm, and personable
+- Respond naturally to greetings, questions, and casual conversation
+- Only use tools when the user's request specifically requires them
+- Think: "Can I answer this directly, or do I need a tool?"
 
-These are for your awareness only - users should not see them in your responses.
+IMPORTANT: When responding to users, speak naturally and conversationally. Do NOT:
+- Echo or mention internal details like "Last observation", "Memory digest", "Shared state"
+- Mention tool execution details or system context in your responses
+- Generate code examples, tests, or technical documentation unless explicitly requested
+- These internal details are for your awareness only - users should not see them
 
+TOOL USAGE:
 When calling tools, always include all required parameters from the tool schema.
-For the ‘speech’ tool, you MUST include the ‘action’ field set to ‘speak’ (with ‘text’) or ‘transcribe’ (with ‘path’).
-For the 'webbrowser' tool, use actions: 'search' (web search), 'fetch' (extract URL), 'browse' (multi-source research), 'goto' (navigate), or 'interact' (automation)."""
+- 'speech' tool: MUST include 'action' field set to 'speak' (with 'text') or 'transcribe' (with 'path')
+- 'webbrowser' tool: use actions: 'search' (web search), 'fetch' (extract URL), 'browse' (multi-source research), 'goto' (navigate), or 'interact' (automation)
+
+Remember: Be helpful and conversational first. Use tools as needed, not by default."""
 
 class MainAgent:
     def __init__(self, state: SharedState, bus: EventBus, registry: ToolRegistry, notifier: Notifier, store: SQLiteStore, session_id: str):
@@ -39,7 +46,10 @@ class MainAgent:
         self.notifier = notifier
         self.store = store
         self.session_id = session_id
-        self.llm = OllamaLLM(model="llama3.1:8b-instruct-q4_K_M", json_mode=True, num_ctx=12000)
+        
+        # Allow model to be configured via environment variable
+        model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
+        self.llm = OllamaLLM(model=model_name, json_mode=True, num_ctx=12000)
 
         webbrowser = WebBrowserTool(state)
         desktop = DesktopTool(state)
