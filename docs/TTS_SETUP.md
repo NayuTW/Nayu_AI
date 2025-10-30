@@ -42,20 +42,70 @@ setx PHONEMIZER_ESPEAK_PATH "c:\Program Files\eSpeak NG"
 
 ### 2. Install Python Dependencies
 
-The NeuTTS-Air dependencies are included in the requirements.txt:
+First, install the base dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-This installs:
+This installs the NeuTTS-Air dependencies:
 - librosa (audio processing)
 - neucodec (neural audio codec)
 - phonemizer (text-to-phoneme conversion)
 - soundfile (audio file I/O)
 - resemble-perth (audio watermarking)
+- llama-cpp-python (for GGUF model support)
+- onnxruntime (for codec inference)
 
-## Configuration
+### 3. Install NeuTTS-Air Package
+
+The neutts-air package itself is not available on PyPI and must be installed from GitHub.
+
+**Option A: Use the installation script (recommended)**
+```bash
+bash scripts/install_neutts_air.sh
+```
+
+This script will:
+- Clone the neutts-air repository
+- Create a setup.py for proper package installation
+- Install it in editable mode
+- Verify the installation
+
+**Option B: Manual installation**
+
+The neutts-air repository doesn't have a setup.py, so you need to create one:
+
+```bash
+# Clone the repository
+git clone https://github.com/neuphonic/neutts-air.git /tmp/neutts-air
+cd /tmp/neutts-air
+
+# Create setup.py
+cat > setup.py << 'EOF'
+from setuptools import setup, find_packages
+setup(
+    name="neutts-air",
+    version="0.1.0",
+    packages=find_packages(),
+    install_requires=[
+        "librosa>=0.11.0", "neucodec>=0.0.4", "phonemizer>=3.3.0",
+        "soundfile>=0.13.1", "resemble-perth>=1.0.1", "torch>=2.0.0",
+        "transformers>=4.43.0", "llama-cpp-python>=0.3.16", "onnxruntime>=1.23.0"
+    ],
+)
+EOF
+
+# Install in editable mode
+pip install -e .
+```
+
+**Verify Installation:**
+```bash
+python -c "from neuttsair.neutts import NeuTTSAir; print('✓ NeuTTS-Air successfully installed')"
+```
+
+## Configuration (Step 4)
 
 ### Preparing Reference Audio for Voice Cloning
 

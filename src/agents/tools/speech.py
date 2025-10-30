@@ -11,6 +11,7 @@ class SpeechTool:
         # Initialize NeuTTS-Air
         self.tts = None
         self.tts_available = False
+        self.import_error = None
         # Allow environment variables to override defaults
         self.ref_audio_path = tts_ref_audio or os.getenv("TTS_REF_AUDIO", "")
         self.ref_text = tts_ref_text or os.getenv("TTS_REF_TEXT", "")
@@ -22,9 +23,17 @@ class SpeechTool:
             self.NeuTTSAir = NeuTTSAir
             self.sf = sf
             self.tts_available = True
-        except ImportError:
+            print("✓ NeuTTS-Air successfully loaded")
+            if self.ref_audio_path:
+                print(f"  - Reference audio configured: {self.ref_audio_path}")
+            else:
+                print("  - Warning: No reference audio configured (TTS_REF_AUDIO not set)")
+        except ImportError as e:
             # NeuTTS-Air not installed
-            pass
+            self.import_error = str(e)
+            print(f"✗ NeuTTS-Air not available: {e}")
+            print("  - TTS will fall back to printing text to console")
+            print("  - See docs/TTS_SETUP.md for installation instructions")
 
     @staticmethod
     def spec():
@@ -67,7 +76,9 @@ class SpeechTool:
                                 with open(self.ref_text, "r") as f:
                                     self.ref_text = f.read().strip()
                     except Exception as e:
-                        summary = f"NeuTTS-Air initialization failed: {str(e)}; printed text instead."
+                        # Print the text as fallback
+                        print(f"[TTS FALLBACK] {text}")
+                        summary = f"NeuTTS-Air initialization failed: {str(e)}. Text printed to console instead."
                         delta = {"last_observation": summary}
                         return {"summary": summary, "delta": delta}
                 
@@ -81,13 +92,18 @@ class SpeechTool:
                         self.sf.write(out_path, wav, 24000)
                         summary = f"Spoken via NeuTTS-Air ({out_path})."
                     else:
-                        # No reference configured - inform user
-                        summary = "NeuTTS-Air requires reference audio and text for voice cloning. Configure tts_ref_audio and tts_ref_text parameters. Text printed instead."
+                        # No reference configured - print text as fallback
+                        print(f"[TTS FALLBACK] {text}")
+                        summary = "NeuTTS-Air requires reference audio and text for voice cloning. Configure TTS_REF_AUDIO and TTS_REF_TEXT environment variables. Text printed to console instead."
                     
                 except Exception as e:
-                    summary = f"NeuTTS-Air failed: {str(e)}; printed text instead."
+                    # Print the text as fallback
+                    print(f"[TTS FALLBACK] {text}")
+                    summary = f"NeuTTS-Air inference failed: {str(e)}. Text printed to console instead."
             else:
-                summary = "NeuTTS-Air not installed; printed text instead."
+                # Print the text as fallback
+                print(f"[TTS FALLBACK] {text}")
+                summary = "NeuTTS-Air not installed. Install neutts-air package and dependencies (see docs/TTS_SETUP.md). Text printed to console instead."
         else:
             summary = "Invalid speech action/args."
         delta = {"last_observation": summary}

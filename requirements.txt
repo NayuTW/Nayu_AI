@@ -28,6 +28,10 @@ safetensors>=0.4
 smolagents>=0.0.18
 
 # NeuTTS-Air TTS dependencies
+# NOTE: neutts-air itself must be installed separately (not on PyPI)
+# Run: pip install git+https://github.com/neuphonic/neutts-air.git@main#egg=neutts-air
+# Or manually: git clone https://github.com/neuphonic/neutts-air.git && cd neutts-air && pip install -e .
+# See docs/TTS_SETUP.md for full installation instructions including espeak
 librosa>=0.11.0
 neucodec>=0.0.4
 phonemizer>=3.3.0

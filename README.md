@@ -30,11 +30,15 @@ pip install -r requirements.txt
 # Playwright browser
 playwright install chromium
 
-# Optional TTS: Install espeak (required by NeuTTS-Air), then install NeuTTS-Air dependencies.
-# Example (varies by distro): 
-# Ubuntu/Debian: sudo apt install espeak
-# Arch-based: sudo pacman -S espeak
-# Mac OS: brew install espeak
+# Optional TTS: Install espeak and NeuTTS-Air
+# 1. Install espeak (required by NeuTTS-Air):
+#    Ubuntu/Debian: sudo apt install espeak
+#    Arch-based: sudo pacman -S espeak
+#    Mac OS: brew install espeak
+#
+# 2. Install NeuTTS-Air package (not on PyPI, must install from GitHub):
+bash scripts/install_neutts_air.sh
+# OR manually: See docs/TTS_SETUP.md for detailed instructions
 ```
 
 ## Configuring NeuTTS-Air for Voice Synthesis
