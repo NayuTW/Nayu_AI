@@ -3,39 +3,54 @@
 ## Issue Description
 After replacing the main LLM with a custom model created from a GGUF file using `ollama create`, the agent was responding with inappropriate content (test code) instead of normal conversational responses when given simple greetings like "Hello".
 
-## Root Cause Analysis
-The issue was caused by three main problems:
-1. The tool-calling prompt template was overly strict and didn't clearly distinguish between when to chat normally vs when to use tools
-2. The system prompt didn't sufficiently emphasize conversational behavior as the default
-3. The model name was hardcoded in the source, requiring code modifications to use custom models
+## Root Cause Analysis (Updated after user testing)
+The issue was caused by a critical architectural problem:
+1. **Multiple conflicting system prompts**: The code was adding multiple system messages - one from main_agent.py with conversational guidance, and another from ollama_client.py with tool-calling format. This created conflicting instructions that confused the model.
+2. **Prompt ordering issue**: The tool-calling format prompt was being PREPENDED, meaning it came before the conversational behavior prompt, causing the model to prioritize JSON format over conversational behavior.
+3. **Insufficient emphasis on default behavior**: The prompts didn't make it sufficiently clear that normal conversation should be the DEFAULT, with tools being the exception.
+
+## Solution (Revised)
+**Unified System Prompt Approach**: Instead of having separate prompts that conflict, we now:
+1. Created TWO integrated system prompts in main_agent.py:
+   - `SYSTEM_PROMPT_BASE`: For when no tools are available
+   - `SYSTEM_PROMPT_WITH_TOOLS`: Includes both conversational behavior AND JSON format instructions in one coherent prompt
+2. Modified ollama_client.py to APPEND tool specs to the existing system message instead of creating a new conflicting system message
+3. This ensures the model gets ONE clear, unified instruction set without conflicts
 
 ## Changes Made
 
-### 1. Enhanced Tool-Calling Prompt (`src/agents/llm/ollama_client.py`)
-**Before**: Strict JSON-only prompt with minimal guidance
-```
-You must respond with ONLY a valid JSON object, nothing else...
-```
-
-**After**: Clear, structured prompt with explicit decision guidance
-- Added clear sections: RESPONSE FORMAT, WHEN TO USE TOOLS, AVAILABLE TOOLS, IMPORTANT
-- Provides explicit examples of both response formats
-- Includes decision rule: "Think: Does this REQUIRE a tool, or can I just chat?"
-- Explicitly warns: "Do not write code examples, tests, or documentation unless explicitly asked"
-- Emphasizes: "Be conversational and friendly when just chatting"
-
-### 2. Improved System Prompt (`src/agents/main_agent.py`)
-**Before**: Generic assistant with tool orchestration focus
+### 1. Unified System Prompt (`src/agents/main_agent.py`)
+**Before**: Single generic prompt, with tool-calling format added separately by ollama_client
 ```
 You are a helpful AI assistant and orchestrator. Think step-by-step and use tools when needed.
 ```
 
-**After**: Conversation-first assistant with clear behavior guidelines
-- Emphasizes being "helpful, friendly" with conversation as primary role
-- Added CORE BEHAVIOR section prioritizing natural conversation
-- Explicitly states: "Only use tools when the user's request specifically requires them"
-- Includes decision rule: "Think: Can I answer this directly, or do I need a tool?"
-- Warns against generating code/tests/documentation unless requested
+**After**: Two integrated prompts that combine conversational behavior with JSON format
+- `SYSTEM_PROMPT_WITH_TOOLS`: Used when tools are available
+  - Includes RESPONSE FORMAT section with explicit JSON examples
+  - DEFAULT to conversation explicitly stated
+  - CRITICAL RULES section emphasizing conversation-first approach
+  - WHEN TO USE EACH FORMAT with concrete examples
+  - Clear instruction: Do NOT generate code in {"text": "..."} responses
+- `SYSTEM_PROMPT_BASE`: Used when no tools available (simple conversational mode)
+
+### 2. Modified LLM Client (`src/agents/llm/ollama_client.py`)
+**Before**: Added a separate system message with tool-calling format
+```python
+if tool_str:
+    sys_aug.append({"role": "system", "content": format_tool_calling_prompt(tool_str)})
+payload["messages"] = sys_aug + messages  # Prepended another system message
+```
+
+**After**: Appends tool specs to existing system message
+```python
+if tool_spec:
+    # Find first system message and append tool info to it
+    modified_content = msg["content"] + f"\n\nAVAILABLE TOOLS:\n{tool_str}"
+```
+- No longer creates conflicting system messages
+- Tool specs are appended to the unified prompt
+- Removed the old TOOL_CALLING_PROMPT_TEMPLATE entirely
 
 ### 3. Configurable Model Name
 **Changed Files**:

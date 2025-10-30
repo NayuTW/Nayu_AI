@@ -2,48 +2,7 @@ import asyncio
 import json
 import re
 from typing import Optional
-from string import Template
 import aiohttp
-
-# System prompt for tool-calling mode using Template to safely substitute tools
-# This avoids KeyError when the prompt contains literal JSON braces like {"tool_call"}
-TOOL_CALLING_PROMPT_TEMPLATE = Template("""You are a helpful AI assistant. You can chat naturally with users AND use tools when needed.
-
-RESPONSE FORMAT:
-You must respond with a valid JSON object using ONE of these two formats:
-
-1. For normal conversation (when no tool is needed):
-{"text": "Your natural, conversational response here"}
-
-2. For using a tool (when the user's request requires specific capabilities):
-{"tool_call": {"name": "tool_name", "arguments": {...}}}
-
-WHEN TO USE TOOLS:
-- Only use tools when the user explicitly asks for something that requires them (web search, code execution, memory lookup, etc.)
-- For greetings, questions, or general chat, just respond with {"text": "..."}
-- Think: Does this REQUIRE a tool, or can I just chat?
-
-AVAILABLE TOOLS:
-$tools
-
-IMPORTANT:
-- Output ONLY the JSON object, no other text before or after
-- Do not write code examples, tests, or documentation unless explicitly asked
-- Be conversational and friendly when just chatting
-- Use tools only when necessary for the task""")
-
-def format_tool_calling_prompt(tools: str) -> str:
-    """
-    Safely format the tool-calling prompt by substituting the tools string.
-    Uses string.Template to avoid interpreting literal JSON braces as format placeholders.
-    
-    Args:
-        tools: JSON string containing the tool specifications
-        
-    Returns:
-        Formatted prompt string with tools injected
-    """
-    return TOOL_CALLING_PROMPT_TEMPLATE.substitute(tools=tools)
 
 class OllamaLLM:
     def __init__(self, model: str, json_mode: bool = True, num_ctx: int = 8000, temperature: float = 0.2):
@@ -122,14 +81,27 @@ class OllamaLLM:
         return {"text": content}
 
     async def chat(self, messages, tools=None):
+        # If tools are provided, append them to the first system message instead of creating a new one
+        # This avoids conflicting system prompts
         tool_spec = tools or []
-        tool_str = json.dumps(tool_spec) if tool_spec else None
-        sys_aug = []
-        if tool_str:
-            sys_aug.append({"role": "system", "content": format_tool_calling_prompt(tool_str)})
+        if tool_spec:
+            tool_str = json.dumps(tool_spec, indent=2)
+            # Find the first system message and append tool info to it
+            modified_messages = []
+            tool_info_added = False
+            for msg in messages:
+                if msg["role"] == "system" and not tool_info_added:
+                    # Append tool specifications to the first system message
+                    modified_content = msg["content"] + f"\n\nAVAILABLE TOOLS (JSON schemas):\n{tool_str}"
+                    modified_messages.append({"role": "system", "content": modified_content})
+                    tool_info_added = True
+                else:
+                    modified_messages.append(msg)
+            messages = modified_messages
+        
         payload = {
             "model": self.model,
-            "messages": sys_aug + messages,
+            "messages": messages,
             "options": {"temperature": self.temperature, "num_ctx": self.num_ctx},
             "stream": False,
         }
