@@ -1,4 +1,5 @@
 from typing import List, Optional
+import os
 import aiohttp
 
 class SmolOllamaModel:
@@ -6,7 +7,10 @@ class SmolOllamaModel:
     Minimal smolagents-compatible model wrapper for Ollama.
     """
 
-    def __init__(self, model: str = "llama3.1:8b-instruct-q4_K_M", num_ctx: int = 12000, temperature: float = 0.2):
+    def __init__(self, model: str = None, num_ctx: int = 12000, temperature: float = 0.2):
+        # Use environment variable or default
+        if model is None:
+            model = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
         self.model = model
         self.num_ctx = num_ctx
         self.temperature = temperature
