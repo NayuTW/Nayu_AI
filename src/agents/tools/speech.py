@@ -76,9 +76,17 @@ class SpeechTool:
                             
                             # Pre-encode reference if available
                             if self.ref_audio_path and os.path.exists(self.ref_audio_path):
-                                print(f"Encoding reference audio: {self.ref_audio_path}")
-                                self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
-                                print(f"✓ Reference audio encoded successfully")
+                                # Check if it's a pre-encoded .pt file or raw audio
+                                if self.ref_audio_path.endswith('.pt'):
+                                    print(f"Loading pre-encoded reference codes: {self.ref_audio_path}")
+                                    import torch
+                                    self.ref_codes = torch.load(self.ref_audio_path)
+                                    print(f"✓ Pre-encoded reference codes loaded successfully")
+                                else:
+                                    print(f"Encoding reference audio: {self.ref_audio_path}")
+                                    self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
+                                    print(f"✓ Reference audio encoded successfully")
+                                
                                 # Load reference text if it's a file path
                                 if self.ref_text and os.path.exists(self.ref_text):
                                     with open(self.ref_text, "r") as f:

@@ -45,15 +45,20 @@ bash scripts/install_neutts_air.sh
 
 NeuTTS-Air provides state-of-the-art voice cloning. To use TTS features:
 
-1. **Reference audio is required** for voice cloning. Prepare:
-   - A 3-15 second mono .wav file (16-44 kHz sample rate)
-   - Clear, natural speech with minimal background noise
-   - A text file with the exact transcript
+1. **Reference audio is required** for voice cloning. You can use:
+   - **Raw audio file**: WAV, MP3, FLAC, or M4A (3-15 seconds, 16-44 kHz sample rate, clear speech)
+   - **Pre-encoded codes**: `.pt` file with pre-encoded reference (faster initialization)
 
 2. **Configure via environment variables**:
    ```bash
+   # Option A: Raw audio file
    export TTS_REF_AUDIO=/path/to/reference.wav
    export TTS_REF_TEXT=/path/to/transcript.txt
+   
+   # Option B: Pre-encoded codes (faster)
+   export TTS_REF_AUDIO=/path/to/reference.pt
+   export TTS_REF_TEXT=/path/to/transcript.txt
+   
    # Or provide text directly:
    export TTS_REF_TEXT="The exact transcript of the reference audio"
    ```
