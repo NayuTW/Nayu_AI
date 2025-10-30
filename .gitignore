@@ -218,3 +218,9 @@ neuttsair/
 
 # .chroma
 .chroma/
+
+# gguf files
+*.gguf
+
+# Modelfiles
+/Modelfile

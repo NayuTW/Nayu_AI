@@ -17,7 +17,7 @@ from src.agents.tools.memory import MemoryTool
 from src.agents.tools.speech import SpeechTool
 from src.agents.tools.codeagent import CodeAgentTool
 
-SYSTEM_PROMPT = """You are a helpful, friendly AI assistant. Your primary role is to chat naturally with users and help them with their requests.
+SYSTEM_PROMPT_BASE = """You are a helpful, friendly AI assistant. Your primary role is to chat naturally with users and help them with their requests.
 
 CORE BEHAVIOR:
 - Be conversational, warm, and personable
@@ -31,12 +31,32 @@ IMPORTANT: When responding to users, speak naturally and conversationally. Do NO
 - Generate code examples, tests, or technical documentation unless explicitly requested
 - These internal details are for your awareness only - users should not see them
 
+Remember: Be helpful and conversational first. Use tools as needed, not by default."""
+
+SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful, friendly AI assistant. Your primary role is to chat naturally with users and help them with their requests.
+
+RESPONSE FORMAT - You MUST respond using ONLY valid JSON in one of these formats:
+1. For normal conversation (greetings, questions, general chat): {"text": "your conversational response"}
+2. For using a tool (ONLY when truly needed): {"tool_call": {"name": "tool_name", "arguments": {...}}}
+
+CRITICAL RULES:
+- DEFAULT to conversation: For "Hello", "How are you", questions, etc. → use {"text": "..."}
+- Use tools ONLY for specific tasks that require them (web search, code execution, memory operations)
+- Output ONLY the JSON - no other text before or after
+- Do NOT generate code, tests, examples, or documentation in your {"text": "..."} responses
+- Be warm and conversational in your {"text": "..."} responses
+
+WHEN TO USE EACH FORMAT:
+- User: "Hello" → {"text": "Hello! How can I help you today?"}
+- User: "What's the weather?" → {"text": "I don't have real-time weather data, but I can search the web if you'd like!"}
+- User: "Search for Python tutorials" → {"tool_call": {"name": "webbrowser", "arguments": {"action": "search", "query": "Python tutorials"}}}
+
 TOOL USAGE:
-When calling tools, always include all required parameters from the tool schema.
+When calling tools, include all required parameters:
 - 'speech' tool: MUST include 'action' field set to 'speak' (with 'text') or 'transcribe' (with 'path')
 - 'webbrowser' tool: use actions: 'search' (web search), 'fetch' (extract URL), 'browse' (multi-source research), 'goto' (navigate), or 'interact' (automation)
 
-Remember: Be helpful and conversational first. Use tools as needed, not by default."""
+IMPORTANT: Do NOT mention internal details like "Last observation", "Memory digest", "Shared state" in responses."""
 
 class MainAgent:
     def __init__(self, state: SharedState, bus: EventBus, registry: ToolRegistry, notifier: Notifier, store: SQLiteStore, session_id: str):
@@ -76,15 +96,19 @@ class MainAgent:
         mem_tool = self.registry.get("memory").impl
         mem_digest = await mem_tool.digest_for_context(user_text)
         context = self.state.build_context(mem_digest)
+        
+        # Use the appropriate system prompt based on tool availability
+        tool_specs = self.tool_specs()
+        system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tool_specs else SYSTEM_PROMPT_BASE
 
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "system", "content": f"Shared state summary:\n{context}"},
             {"role": "user", "content": user_text},
         ]
 
         await self.bus.publish("agent.input", {"text": user_text})
-        out = await self.llm.chat(messages, tools=self.tool_specs())
+        out = await self.llm.chat(messages, tools=tool_specs)
 
         async def _persist_example(final_text: str):
             meta = {
