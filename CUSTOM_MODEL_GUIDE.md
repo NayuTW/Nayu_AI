@@ -49,11 +49,12 @@ The main LLM model is now configurable via the `AGENT_MODEL` environment variabl
 ### Step 1: Create Your Custom Model
 
 ```bash
-# Create your custom model with Ollama
+# Create your custom model with Ollama using a Modelfile
 ollama create my-custom-model -f Modelfile
 
-# Or from a GGUF file
-ollama create my-custom-model -f <(echo "FROM /path/to/your-model.gguf")
+# Or from a GGUF file (create a temporary Modelfile first)
+echo "FROM /path/to/your-model.gguf" > /tmp/Modelfile
+ollama create my-custom-model -f /tmp/Modelfile
 ```
 
 ### Step 2: Set the Environment Variable
