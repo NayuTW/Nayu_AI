@@ -70,9 +70,10 @@ class MemoryTool:
         state.scratchpad = state.scratchpad[-1000:]
 
     def _add_chunks(self, base_id: str, chunks: List[str], metadata: Optional[Dict[str, Any]] = None) -> int:
+        safe_meta = metadata if (metadata and len(metadata) > 0) else {"tag": "general"}
         embs = self.embedder.embed_texts(chunks)
         ids = [f"{base_id}__{i}" for i in range(len(chunks))]
-        metas = [metadata or {} for _ in chunks]
+        metas = [dict(safe_meta) for _ in chunks]
         self.col.add(ids=ids, documents=chunks, embeddings=embs, metadatas=metas)
         return len(chunks)
 
@@ -80,7 +81,8 @@ class MemoryTool:
         if action == "remember" and text:
             base_id = doc_id or f"id_{abs(hash(text))}"
             chunks = _chunk_text(text)
-            n = self._add_chunks(base_id, chunks, metadata=metadata)
+            md = metadata if (metadata and len(metadata) > 0) else {"tag": "general"}
+            n = self._add_chunks(base_id, chunks, metadata=md)
             summary = f"Stored {n} chunk(s) under {base_id}."
             delta = {"memory_digest": f"Remembered: {chunks[0][:200]}{'...' if len(chunks)>1 else ''}"}
             return {"summary": summary, "delta": delta}

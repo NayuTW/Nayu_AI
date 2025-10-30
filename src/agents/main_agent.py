@@ -24,6 +24,9 @@ CORE BEHAVIOR:
 - Respond naturally to greetings, questions, and casual conversation
 - Only use tools when the user's request specifically requires them
 - Think: "Can I answer this directly, or do I need a tool?"
+- You may receive messages from multiple channels (e.g., cli, discord). You can reference prior messages via memory.
+- Do NOT claim you lack access to external platforms; messages are delivered to you by adapters.
+- When using the memory tool to remember something, include useful metadata when available (e.g., {"tag": "<source>"}).
 
 IMPORTANT: When responding to users, speak naturally and conversationally. Do NOT:
 - Echo or mention internal details like "Last observation", "Memory digest", "Shared state"
@@ -55,6 +58,7 @@ TOOL USAGE:
 When calling tools, include all required parameters:
 - 'speech' tool: MUST include 'action' field set to 'speak' (with 'text') or 'transcribe' (with 'path')
 - 'webbrowser' tool: use actions: 'search' (web search), 'fetch' (extract URL), 'browse' (multi-source research), 'goto' (navigate), or 'interact' (automation)
+- 'memory' tool: Include useful metadata when available (e.g., {"tag": "<source>"})
 
 IMPORTANT: Do NOT mention internal details like "Last observation", "Memory digest", "Shared state" in responses."""
 
@@ -92,7 +96,14 @@ class MainAgent:
                 specs.append(rt.spec)
         return specs
 
-    async def handle_user_message(self, user_text: str) -> str:
+    async def handle_user_message(
+        self,
+        user_text: str,
+        source: str = "cli",
+        external_metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
+        channel_id: Optional[str] = None,
+    ) -> str:
         mem_tool = self.registry.get("memory").impl
         mem_digest = await mem_tool.digest_for_context(user_text)
         context = self.state.build_context(mem_digest)
@@ -101,19 +112,28 @@ class MainAgent:
         tool_specs = self.tool_specs()
         system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tool_specs else SYSTEM_PROMPT_BASE
 
+        # Channel awareness for the model (not shown to the end user verbatim)
+        channel_context = f"Message source: {source}"
+        if user_id or channel_id:
+            channel_context += f" (user_id={user_id or ''}, channel_id={channel_id or ''})"
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "system", "content": f"Shared state summary:\n{context}"},
+            {"role": "system", "content": channel_context},
             {"role": "user", "content": user_text},
         ]
 
-        await self.bus.publish("agent.input", {"text": user_text})
+        await self.bus.publish("agent.input", {"text": user_text, "source": source, "meta": external_metadata or {}})
         out = await self.llm.chat(messages, tools=tool_specs)
 
         async def _persist_example(final_text: str):
             meta = {
                 "memory_digest": mem_digest,
                 "tools_enabled": [name for name, rt in self.registry._tools.items() if rt.stats.enabled],
+                "source": source,
+                "user_id": user_id,
+                "channel_id": channel_id,
             }
             ex_id = self.store.append_example(
                 session_id=self.session_id,
@@ -126,7 +146,7 @@ class MainAgent:
 
         if out.get("tool_call"):
             tool_name = out["tool_call"]["name"]
-            args = out["tool_call"].get("arguments", {})
+            args = out["tool_call"].get("arguments", {}) or {}
 
             rt = self.registry.get(tool_name)
             if not rt:
@@ -142,6 +162,20 @@ class MainAgent:
                 await self.bus.publish("tool.disabled", {"name": tool_name})
                 await _persist_example(msg)
                 return msg
+
+            if tool_name == "memory" and (args.get("action") == "remember"):
+                md = dict(args.get("metadata") or {})
+                if external_metadata:
+                    for k, v in external_metadata.items():
+                        if v is not None and k not in md:
+                            md[k] = v
+                if "tag" not in md:
+                    md["tag"] = source
+                if user_id and "user_id" not in md:
+                    md["user_id"] = user_id
+                if channel_id and "channel_id" not in md:
+                    md["channel_id"] = channel_id
+                args["metadata"] = md  # ensure non-empty dict for Chroma
 
             await self.bus.publish("tool.start", {"name": tool_name, "args": args})
             t0 = time.time()
@@ -211,24 +245,15 @@ class MainAgent:
             "metadata": metadata,
         })
 
-        # Format the message with context from Discord/external source
-        is_dm = metadata.get("is_dm", False)
-        guild_name = metadata.get("guild_name", "")
-        channel_name = metadata.get("channel_name", "")
-        
-        # Add context prefix for guild messages, skip for DMs
-        if not is_dm and guild_name:
-            context_prefix = f"[Discord in {guild_name}"
-            if channel_name:
-                context_prefix += f" #{channel_name}"
-            context_prefix += "] "
-            formatted_text = context_prefix + text
-        else:
-            formatted_text = text
-
-        # Use the existing message handling pipeline
         try:
-            reply = await self.handle_user_message(formatted_text)
+            # Forward the raw text along with channel/source context
+            reply = await self.handle_user_message(
+                user_text=text,
+                source=source,
+                external_metadata=metadata or {},
+                user_id=user_id,
+                channel_id=channel_id,
+            )
             return reply
         except Exception as e:
             # Log the error and return a friendly error message

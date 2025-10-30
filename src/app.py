@@ -107,7 +107,8 @@ async def main():
                 store.set_setting("voice_enabled", "0")
                 print("Voice disabled.")
                 continue
-            resp = await agent.handle_user_message(user)
+            # Pass source + minimal metadata so agent can distinguish CLI vs Discord
+            resp = await agent.handle_user_message(user, source="cli", external_metadata={"tag": "cli"})
             print("Agent:", resp)
     finally:
         # Cleanup Discord bot on exit
