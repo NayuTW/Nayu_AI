@@ -184,3 +184,48 @@ class MainAgent:
             await self.bus.publish("agent.output", {"text": text})
             await _persist_example(text)
             return text
+
+
+        async def handle_external_message(
+            self,
+            text: str,
+            user_id: str,
+            channel_id: str,
+            source: str,
+            metadata: Dict[str, Any],
+        ) -> Optional[str]:
+            """
+            Entry point for external adapters (Discord, etc.).
+            - Log/emit an event
+            - Persist to store/memory if desired
+            - Run orchestration and return a reply string (or None to skip replying)
+            """
+            try:
+                events = getattr(self, "events", None)
+                if events and hasattr(events, "publish"):
+                    await events.publish("message.received"), {
+                        "source": source,
+                        "user_id": user_id,
+                        "channel_id": channel_id,
+                        "text": text,
+                        "metadata": metadata,
+                    })
+            except Exception:
+                pass
+
+            # TODO: persist to SQLite via store or add to memory vector DB
+            # await self.store.save_message(...)
+
+            # Orchestrate a response (replace with actual pipeline)
+            # IE: Use LLM client with tool calling and blackboard context
+
+            try:
+                llm = getattr(self, "llm", None)
+                if llm is None:
+                    return None
+                prompt = f"[discord:{metadata.get('guild_name') or 'dm'}#{metadata.get('channel_name') or channel_id}] {text}"
+                reply: str = await llm.generate(prompt)     #Adapt to my API
+                return reply
+            except Exception:
+                # Prefer to surface to dashboard in real implementation
+                return None
