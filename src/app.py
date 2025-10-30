@@ -3,6 +3,7 @@ import time
 import uvicorn
 import uuid
 import os
+import logging
 
 from src.agents.state import SharedState
 from src.agents.core.events import EventBus
@@ -16,6 +17,8 @@ from src.agents.main_agent import MainAgent
 
 from src.dashboard.server import init_dashboard
 
+logger = logging.getLogger(__name__)
+
 async def start_dashboard(bus, registry, health, store, notifier):
     from src.dashboard.server import app
     init_dashboard(bus, registry, health, store, notifier)
@@ -24,6 +27,36 @@ async def start_dashboard(bus, registry, health, store, notifier):
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
     await server.serve()
+
+async def start_discord_bot(agent):
+    """Start Discord bot service if DISCORD_BOT_TOKEN is set."""
+    discord_token = os.getenv("DISCORD_BOT_TOKEN")
+    if not discord_token:
+        logger.info("DISCORD_BOT_TOKEN not set, Discord bot will not start")
+        return None
+    
+    try:
+        from src.integrations.discord_bot import DiscordBotService
+        
+        # Configure Discord bot
+        respond_mode = os.getenv("DISCORD_RESPOND_MODE", "mention")  # passive, mention, prefix, all
+        command_prefix = os.getenv("DISCORD_COMMAND_PREFIX", "!")
+        read_only = os.getenv("DISCORD_READ_ONLY", "false").lower() == "true"
+        
+        discord_service = DiscordBotService(
+            agent=agent,
+            token=discord_token,
+            respond_mode=respond_mode,
+            command_prefix=command_prefix,
+            read_only=read_only,
+        )
+        
+        await discord_service.start()
+        logger.info("Discord bot started successfully in '%s' mode", respond_mode)
+        return discord_service
+    except Exception as e:
+        logger.exception("Failed to start Discord bot: %s", e)
+        return None
 
 async def main():
     state = SharedState()
@@ -50,25 +83,37 @@ async def main():
     await error_speaker.start()
 
     asyncio.create_task(start_dashboard(bus, registry, health, store, notifier))
+    
+    # Start Discord bot if configured
+    discord_service = await start_discord_bot(agent)
 
     print("Agent + Dashboard running (VM) at http://<vm-ip>:8008")
+    if discord_service:
+        print("Discord bot is running")
     print("Type 'voice on' or 'voice off' to toggle voice; 'quit' to exit.")
-    while True:
-        user = await asyncio.to_thread(input,"You: ")
-        if user.strip().lower() == "quit":
-            break
-        if user.strip().lower() == "voice on":
-            notifier.set_voice(True)
-            store.set_setting("voice_enabled", "1")
-            print("Voice enabled.")
-            continue
-        if user.strip().lower() == "voice off":
-            notifier.set_voice(False)
-            store.set_setting("voice_enabled", "0")
-            print("Voice disabled.")
-            continue
-        resp = await agent.handle_user_message(user)
-        print("Agent:", resp)
+    
+    try:
+        while True:
+            user = await asyncio.to_thread(input,"You: ")
+            if user.strip().lower() == "quit":
+                break
+            if user.strip().lower() == "voice on":
+                notifier.set_voice(True)
+                store.set_setting("voice_enabled", "1")
+                print("Voice enabled.")
+                continue
+            if user.strip().lower() == "voice off":
+                notifier.set_voice(False)
+                store.set_setting("voice_enabled", "0")
+                print("Voice disabled.")
+                continue
+            resp = await agent.handle_user_message(user)
+            print("Agent:", resp)
+    finally:
+        # Cleanup Discord bot on exit
+        if discord_service:
+            logger.info("Shutting down Discord bot...")
+            await discord_service.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -7,6 +7,7 @@ A fully local, Python multi‑agent system designed to run on a single GPU (12GB
 - Markdown Browser sub‑agent with embedded ranking (small local embedding model) for token‑efficient web research
 - Memory with local embeddings (Chroma + e5/bge/MiniLM)
 - Dashboard (FastAPI + HTMX) for live control: toggle tools, health, logs, testing, settings
+- Discord integration for reading and responding to messages in guilds and DMs
 - Persistent SQLite store for events, tool metrics, user settings, and fine‑tune dataset curation
 - One‑click export of curated examples to JSONL
 - Voice error notifications (“There is a problem with my AI.”) with a repeater loop
@@ -144,6 +145,36 @@ virsh net-dhcp-leases default
 - bitsandbytes missing GPU wheels: ensure compatible CUDA or run CPU inference for the VLM
 - Desktop control in VM controls the VM desktop, not the host desktop (by design)
 
+## Discord Integration
+
+The agent can integrate with Discord to read and respond to messages in guilds (servers) and DMs.
+
+**Setup:**
+1. Create a Discord application and bot at https://discord.com/developers/applications
+2. Enable "Message Content Intent" in the Bot settings
+3. Invite the bot to your server with appropriate permissions (Read Messages, Send Messages)
+4. Set the bot token via environment variable:
+   ```bash
+   export DISCORD_BOT_TOKEN=your_bot_token_here
+   ```
+
+**Configuration via environment variables:**
+- `DISCORD_BOT_TOKEN`: Your Discord bot token (required to enable Discord integration)
+- `DISCORD_RESPOND_MODE`: How the bot responds (default: "mention")
+  - `passive`: Only log messages, never reply
+  - `mention`: Reply when mentioned or in DMs
+  - `prefix`: Reply when message starts with command prefix or in DMs
+  - `all`: Reply to every message (use with caution!)
+- `DISCORD_COMMAND_PREFIX`: Command prefix for prefix mode (default: "!")
+- `DISCORD_READ_ONLY`: Set to "true" to only log messages without ever replying (default: "false")
+
+**Features:**
+- Reads all messages in guilds and DMs (when bot has access)
+- Publishes events to the dashboard event stream
+- Uses the same AI pipeline as CLI interactions
+- Supports DMs and guild channel messages
+- Provides programmatic send methods (`send_dm`, `send_channel_message`)
+
 ## Env vars
 
 - AGENT_MODEL: Ollama model name for the main LLM (default: llama3.1:8b-instruct-q4_K_M)
@@ -151,6 +182,10 @@ virsh net-dhcp-leases default
 - AGENT_DASH_PORT: default 8008
 - TTS_REF_AUDIO: path to reference audio file for NeuTTS-Air voice cloning (optional)
 - TTS_REF_TEXT: text content or path to text file for the reference audio (optional)
+- DISCORD_BOT_TOKEN: Discord bot token to enable Discord integration (optional)
+- DISCORD_RESPOND_MODE: Bot response mode - passive/mention/prefix/all (default: mention)
+- DISCORD_COMMAND_PREFIX: Command prefix for Discord bot (default: !)
+- DISCORD_READ_ONLY: Set to "true" for read-only mode (default: false)
 
 ## Safety
 

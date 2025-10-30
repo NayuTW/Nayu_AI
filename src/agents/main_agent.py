@@ -1,7 +1,7 @@
 import asyncio
 import os
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from src.agents.state import SharedState
 from src.agents.llm.ollama_client import OllamaLLM
@@ -185,47 +185,56 @@ class MainAgent:
             await _persist_example(text)
             return text
 
+    async def handle_external_message(
+        self,
+        text: str,
+        user_id: str,
+        channel_id: str,
+        source: str,
+        metadata: Dict[str, Any],
+    ) -> Optional[str]:
+        """
+        Entry point for external adapters (Discord, etc.).
+        - Log/emit an event
+        - Persist to store/memory if desired
+        - Run orchestration and return a reply string (or None to skip replying)
+        
+        This method reuses the existing handle_user_message logic to ensure
+        consistent behavior across all input sources (CLI, Discord, etc.).
+        """
+        # Publish event about the external message
+        await self.bus.publish("message.received", {
+            "source": source,
+            "user_id": user_id,
+            "channel_id": channel_id,
+            "text": text,
+            "metadata": metadata,
+        })
 
-        async def handle_external_message(
-            self,
-            text: str,
-            user_id: str,
-            channel_id: str,
-            source: str,
-            metadata: Dict[str, Any],
-        ) -> Optional[str]:
-            """
-            Entry point for external adapters (Discord, etc.).
-            - Log/emit an event
-            - Persist to store/memory if desired
-            - Run orchestration and return a reply string (or None to skip replying)
-            """
-            try:
-                events = getattr(self, "events", None)
-                if events and hasattr(events, "publish"):
-                    await events.publish("message.received"), {
-                        "source": source,
-                        "user_id": user_id,
-                        "channel_id": channel_id,
-                        "text": text,
-                        "metadata": metadata,
-                    })
-            except Exception:
-                pass
+        # Format the message with context from Discord/external source
+        is_dm = metadata.get("is_dm", False)
+        guild_name = metadata.get("guild_name", "")
+        channel_name = metadata.get("channel_name", "")
+        
+        # Add context prefix for guild messages, skip for DMs
+        if not is_dm and guild_name:
+            context_prefix = f"[Discord in {guild_name}"
+            if channel_name:
+                context_prefix += f" #{channel_name}"
+            context_prefix += "] "
+            formatted_text = context_prefix + text
+        else:
+            formatted_text = text
 
-            # TODO: persist to SQLite via store or add to memory vector DB
-            # await self.store.save_message(...)
-
-            # Orchestrate a response (replace with actual pipeline)
-            # IE: Use LLM client with tool calling and blackboard context
-
-            try:
-                llm = getattr(self, "llm", None)
-                if llm is None:
-                    return None
-                prompt = f"[discord:{metadata.get('guild_name') or 'dm'}#{metadata.get('channel_name') or channel_id}] {text}"
-                reply: str = await llm.generate(prompt)     #Adapt to my API
-                return reply
-            except Exception:
-                # Prefer to surface to dashboard in real implementation
-                return None
+        # Use the existing message handling pipeline
+        try:
+            reply = await self.handle_user_message(formatted_text)
+            return reply
+        except Exception as e:
+            # Log the error and return a friendly error message
+            await self.bus.publish("agent.error", {
+                "source": source,
+                "user_id": user_id,
+                "error": str(e),
+            })
+            return "Sorry, I encountered an error processing your message."
