@@ -144,6 +144,55 @@ class MainAgent:
             await self.bus.publish("dataset.example", {"id": ex_id, "label": "unlabeled"})
             return ex_id
 
+        # Helper: enrich metadata for memory tool calls
+        def _enrich_memory_metadata(md: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+            enriched = dict(md or {})
+            if external_metadata:
+                for k, v in external_metadata.items():
+                    if v is not None and k not in enriched:
+                        enriched[k] = v
+            if "tag" not in enriched:
+                enriched["tag"] = source
+            if user_id and "user_id" not in enriched:
+                enriched["user_id"] = user_id
+            if channel_id and "channel_id" not in enriched:
+                enriched["channel_id"] = channel_id
+            return enriched
+
+        # Heuristic fallback for memory operations when the LLM outputs empty text or doesn't tool-call
+        async def _memory_fallback_if_needed(empty_text: bool) -> Optional[str]:
+            lt = (user_text or "").lower()
+            try:
+                # Try "remember" shortcuts
+                if ("remember" in lt and ("remember this" in lt or lt.startswith("remember") or "please remember" in lt or "i want you to remember" in lt)) or lt.strip() == "remember":
+                    md = _enrich_memory_metadata({})
+                    await self.bus.publish("tool.start", {"name": "memory", "args": {"action": "remember"}})
+                    res = await mem_tool.run(action="remember", text=user_text, metadata=md)
+                    await self.bus.publish("tool.success", {"name": "memory", "latency_ms": 0, "summary": res.get("summary", "")})
+                    self.state.merge_delta(res.get("delta", {}))
+                    await mem_tool.update_working_memo(self.state)
+                    return "Got it — I’ll remember that."
+
+                # Try "recall" shortcuts
+                if ("recall" in lt) or ("do you remember" in lt) or ("what did i say" in lt) or ("what was the message" in lt):
+                    await self.bus.publish("tool.start", {"name": "memory", "args": {"action": "recall"}})
+                    res = await mem_tool.run(action="recall", text=user_text, k=3)
+                    await self.bus.publish("tool.success", {"name": "memory", "latency_ms": 0, "summary": res.get("summary", "")})
+                    self.state.merge_delta(res.get("delta", {}))
+                    await mem_tool.update_working_memo(self.state)
+                    digest = (res.get("delta", {}) or {}).get("memory_digest", "").strip()
+                    if digest:
+                        first = digest.split(" | ")[0]
+                        return f"Here’s what I recall: {first}"
+                    else:
+                        return "I couldn’t find anything yet. Could you restate it so I can remember?"
+            except Exception as e:
+                # Surface a friendly error if the heuristic fallback failed
+                await self.bus.publish("tool.error", {"name": "memory", "error": str(e)})
+                if empty_text:
+                    return "Sorry — something went wrong handling memory. Please try again."
+            return None
+
         if out.get("tool_call"):
             tool_name = out["tool_call"]["name"]
             args = out["tool_call"].get("arguments", {}) or {}
@@ -163,19 +212,9 @@ class MainAgent:
                 await _persist_example(msg)
                 return msg
 
+            # Enrich memory remember with non-empty metadata and source/user/channel context
             if tool_name == "memory" and (args.get("action") == "remember"):
-                md = dict(args.get("metadata") or {})
-                if external_metadata:
-                    for k, v in external_metadata.items():
-                        if v is not None and k not in md:
-                            md[k] = v
-                if "tag" not in md:
-                    md["tag"] = source
-                if user_id and "user_id" not in md:
-                    md["user_id"] = user_id
-                if channel_id and "channel_id" not in md:
-                    md["channel_id"] = channel_id
-                args["metadata"] = md  # ensure non-empty dict for Chroma
+                args["metadata"] = _enrich_memory_metadata(args.get("metadata"))
 
             await self.bus.publish("tool.start", {"name": tool_name, "args": args})
             t0 = time.time()
@@ -193,7 +232,10 @@ class MainAgent:
                     {"role": "tool", "content": result.get("summary", "")},
                 ]
                 final = await self.llm.chat(messages + follow, tools=[])
-                final_text = final.get("text", "")
+                final_text = (final.get("text", "") or "").strip()
+                if not final_text:
+                    # Fallback to tool summary if model produced an empty reply
+                    final_text = result.get("summary", "") or "Done."
                 await self.bus.publish("agent.output", {"text": final_text})
                 await _persist_example(final_text)
                 return final_text
@@ -214,7 +256,16 @@ class MainAgent:
                 await _persist_example(msg)
                 return msg
         else:
-            text = out.get("text", "")
+            text = (out.get("text", "") or "").strip()
+            if not text:
+                # Heuristic fallback for empty model output, e.g., remember/recall requests
+                fb = await _memory_fallback_if_needed(empty_text=True)
+                if fb:
+                    await self.bus.publish("agent.output", {"text": fb})
+                    await _persist_example(fb)
+                    return fb
+                # Generic fallback
+                text = "Sorry — I didn’t catch that. Could you rephrase?"
             await self.bus.publish("agent.output", {"text": text})
             await _persist_example(text)
             return text

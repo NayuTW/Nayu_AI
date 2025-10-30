@@ -5,7 +5,7 @@ from typing import Optional
 import aiohttp
 
 class OllamaLLM:
-    def __init__(self, model: str, json_mode: bool = True, num_ctx: int = 8000, temperature: float = 0.2):
+    def __init__(self, model: str, json_mode: bool = True, num_ctx: int = 8192, temperature: float = 0.8):
         self.model = model
         self.json_mode = json_mode
         self.num_ctx = num_ctx

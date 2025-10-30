@@ -1,12 +1,21 @@
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional, Set, Iterable
 
 import discord
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
+
+# Discord hard limit is 2000 characters per message. Leave headroom.
+MAX_DISCORD_MSG_LEN = 1900
+
+
+def _chunk_text(s: str, n: int = MAX_DISCORD_MSG_LEN) -> Iterable[str]:
+    if not s:
+        return []
+    return (s[i:i+n] for i in range(0, len(s), n))
 
 
 class DiscordBotService:
@@ -73,7 +82,13 @@ class DiscordBotService:
     def _wire_events(self) -> None:
         @self.bot.event
         async def on_ready():
-            logger.info("Discord bot connected as %s (id=%s)", self.bot.user, self.bot.user.id if self.bot.user else None)
+            logger.info(
+                "Discord bot connected as %s (id=%s) respond_mode=%s read_only=%s",
+                self.bot.user,
+                self.bot.user.id if self.bot.user else None,
+                self.respond_mode,
+                self.read_only,
+            )
             self._running.set()
 
         @self.bot.event
@@ -90,8 +105,21 @@ class DiscordBotService:
                 if message.channel.id not in self.allowed_channel_ids:
                     return
 
-            # Always forward the message to the agent for logging/memory
-            await self._forward_to_agent_for_ingest(message)
+            is_dm = message.guild is None
+            mentions_bot = self._is_bot_mentioned(message)
+            content = message.content or ""
+            logger.debug(
+                "on_message: guild=%s channel=%s is_dm=%s respond_mode=%s mentions_bot=%s content_len=%d",
+                message.guild.id if message.guild else None,
+                message.channel.id,
+                is_dm,
+                self.respond_mode,
+                mentions_bot,
+                len(content),
+            )
+
+            # Lightweight ingest only (do NOT generate an LLM reply here)
+            asyncio.create_task(self._lightweight_ingest(message))
 
             # Determine if we should reply
             if self.read_only or self.respond_mode == "passive":
@@ -99,6 +127,7 @@ class DiscordBotService:
 
             should_reply = await self._should_reply(message)
             if not should_reply:
+                logger.debug("Reply gated: should_reply=%s", should_reply)
                 return
 
             try:
@@ -107,60 +136,46 @@ class DiscordBotService:
                 logger.exception("Agent reply failed: %s", e)
                 reply = "Sorry, something went wrong while generating a response."
 
-            if reply:
-                await self._safe_reply(message, reply)
+            # Avoid sending blank messages; provide a friendly fallback
+            if not reply or not str(reply).strip():
+                logger.info("Agent returned empty response; sending fallback")
+                reply = "Sorry — I didn’t catch that. Could you rephrase?"
+
+            await self._safe_reply(message, reply)
 
         # Optional simple command to verify the bot
         @self.bot.command(name="ping")
         async def ping(ctx: commands.Context):
             await ctx.reply("pong")
 
-    async def _forward_to_agent_for_ingest(self, message: discord.Message) -> None:
-        content = message.content or ""
-        user_id = str(message.author.id)
-        channel_id = str(message.channel.id)
-        source = "discord"
-
-        metadata: Dict[str, Any] = {
-            "username": str(message.author),
-            "display_name": getattr(message.author, "display_name", None),
-            "guild_id": message.guild.id if message.guild else None,
-            "guild_name": message.guild.name if message.guild else None,
-            "channel_name": getattr(message.channel, "name", None),
-            "is_dm": message.guild is None,
-            "message_id": str(message.id),
-            "mentions_bot": self._is_bot_mentioned(message),
-        }
-
-        # Fire-and-forget ingestion; don't block the Discord gateway
-        asyncio.create_task(self._invoke_agent_ingest(content, user_id, channel_id, source, metadata))
-
-    async def _invoke_agent_ingest(
-        self,
-        text: str,
-        user_id: str,
-        channel_id: str,
-        source: str,
-        metadata: Dict[str, Any],
-    ) -> None:
+    async def _lightweight_ingest(self, message: discord.Message) -> None:
         """
-        Send message to agent even if we don't plan to reply, so memory/metrics stay in sync.
-        Default behavior: call the same hook used for replies, and ignore its returned text.
-        If your agent has a dedicated 'ingest only' path, call that here instead.
+        Publish a minimal ingest event without invoking the full LLM pipeline.
+        This prevents 'dashboard-only' outputs when we don't intend to reply.
         """
         try:
-            handler = getattr(self.agent, "handle_external_message", None)
-            if callable(handler):
-                await handler(text=text, user_id=user_id, channel_id=channel_id, source=source, metadata=metadata)
-            else:
-                # Fallback: try 'process_user_message' or 'handle_message' if your agent exposes them
-                for candidate in ("process_user_message", "handle_message", "ingest_message"):
-                    func = getattr(self.agent, candidate, None)
-                    if callable(func):
-                        await func(text=text, user_id=user_id, channel_id=channel_id, source=source, metadata=metadata)
-                        break
+            payload: Dict[str, Any] = {
+                "source": "discord",
+                "user_id": str(message.author.id),
+                "channel_id": str(message.channel.id),
+                "text": message.content or "",
+                "metadata": {
+                    "username": str(message.author),
+                    "display_name": getattr(message.author, "display_name", None),
+                    "guild_id": message.guild.id if message.guild else None,
+                    "guild_name": message.guild.name if message.guild else None,
+                    "channel_name": getattr(message.channel, "name", None),
+                    "is_dm": message.guild is None,
+                    "message_id": str(message.id),
+                    "mentions_bot": self._is_bot_mentioned(message),
+                },
+            }
+            # If the agent exposes an EventBus, publish the ingest event
+            bus = getattr(self.agent, "bus", None)
+            if bus and hasattr(bus, "publish"):
+                await bus.publish("message.ingest", payload)
         except Exception:
-            logger.exception("Agent ingestion failed")
+            logger.exception("Lightweight ingest failed")
 
     async def _maybe_get_agent_reply(self, message: discord.Message) -> Optional[str]:
         text = self._strip_bot_mention(message) if self._is_bot_mentioned(message) else (message.content or "")
@@ -185,7 +200,7 @@ class DiscordBotService:
             # If your agent uses another API, adapt here
             raise RuntimeError("MainAgent is missing 'handle_external_message'")
 
-        return await handler(
+        reply = await handler(
             text=text,
             user_id=user_id,
             channel_id=channel_id,
@@ -193,19 +208,34 @@ class DiscordBotService:
             metadata=metadata,
         )
 
+        # Normalize to string (agent may return None)
+        return "" if reply is None else str(reply)
+
     async def _safe_reply(self, message: discord.Message, reply: str) -> None:
         """
         Reply in the same context:
         - In DMs: reply directly
         - In guild channels: send in channel, prefer a reply to the specific message
+        - Chunk long replies to respect Discord's 2000-char limit
         """
         try:
+            parts = list(_chunk_text(reply))
+            if not parts:
+                logger.info("Nothing to send after chunking")
+                return
+
             if message.guild is None:
-                await message.channel.send(reply)
+                for part in parts:
+                    await message.channel.send(part)
             else:
-                await message.reply(reply, mention_author=False)
+                # Reply to the triggering message once, then continue in channel for additional parts
+                await message.reply(parts[0], mention_author=False)
+                for part in parts[1:]:
+                    await message.channel.send(part)
         except discord.Forbidden:
             logger.warning("Missing permissions to reply in channel %s", message.channel.id)
+        except discord.HTTPException as e:
+            logger.exception("Failed to send reply (HTTPException): %s", e)
         except Exception:
             logger.exception("Failed to send reply")
 
@@ -276,7 +306,8 @@ class DiscordBotService:
     async def send_dm(self, user_id: int, content: str) -> None:
         try:
             user = await self.bot.fetch_user(user_id)
-            await user.send(content)
+            for part in _chunk_text(content):
+                await user.send(part)
         except Exception:
             logger.exception("Failed to send DM to %s", user_id)
 
@@ -284,7 +315,8 @@ class DiscordBotService:
         try:
             channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
             if isinstance(channel, (discord.TextChannel, discord.Thread, discord.DMChannel)):
-                await channel.send(content)
+                for part in _chunk_text(content):
+                    await channel.send(part)
             else:
                 logger.warning("Channel %s not a text-capable channel", channel_id)
         except Exception:
