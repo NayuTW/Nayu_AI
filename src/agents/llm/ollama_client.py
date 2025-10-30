@@ -30,7 +30,7 @@ IMPORTANT:
 - Output ONLY the JSON object, no other text before or after
 - Do not write code examples, tests, or documentation unless explicitly asked
 - Be conversational and friendly when just chatting
-- Use tools only when necessary for the task
+- Use tools only when necessary for the task""")
 
 def format_tool_calling_prompt(tools: str) -> str:
     """

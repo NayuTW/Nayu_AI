@@ -146,6 +146,7 @@ virsh net-dhcp-leases default
 
 ## Env vars
 
+- AGENT_MODEL: Ollama model name for the main LLM (default: llama3.1:8b-instruct-q4_K_M)
 - AGENT_DASH_HOST: default 0.0.0.0 (bind address)
 - AGENT_DASH_PORT: default 8008
 - TTS_REF_AUDIO: path to reference audio file for NeuTTS-Air voice cloning (optional)
