@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional, Set, Iterable
+from typing import Any, Dict, Optional, Set, Iterable, List
 
 import discord
 from discord.ext import commands
@@ -18,33 +18,22 @@ def _chunk_text(s: str, n: int = MAX_DISCORD_MSG_LEN) -> Iterable[str]:
     return (s[i:i+n] for i in range(0, len(s), n))
 
 
+def _only_digits(s: str) -> Optional[int]:
+    s = "".join(ch for ch in s if ch.isdigit())
+    if len(s) >= 16:  # Discord snowflakes are 17–19 digits typically
+        try:
+            return int(s)
+        except Exception:
+            return None
+    return None
+
+
 class DiscordBotService:
     """
     Discord adapter for Nayu_AI.
 
-    Responsibilities:
-    - Connect to Discord with Pycord (discord.py fork).
-    - Read ALL messages in guilds the bot is in, and DMs to the bot.
-    - Forward every message to the MainAgent for logging/memory/metrics (non-blocking).
-    - Optionally generate AI replies based on respond_mode:
-        - "passive": never reply, only log/ingest
-        - "mention": reply if bot is mentioned or in DM
-        - "prefix": reply if message starts with command_prefix or in DM
-        - "all": reply to every message (careful!)
-    - Provide helper methods to send DMs or channel messages programmatically.
-
-    Expected MainAgent interface:
-        async def handle_external_message(
-            self,
-            text: str,
-            user_id: str,
-            channel_id: str,
-            source: str,
-            metadata: Dict[str, Any],
-        ) -> Optional[str]:
-            return "response or None"
-
-    If your MainAgent uses a different API, adapt `_maybe_get_agent_reply`.
+    - Keeps a lightweight directory of seen users/channels to resolve @names / #channels -> IDs.
+    - Provides send helpers that accept targets like "@alice" or "#general".
     """
 
     def __init__(
@@ -71,13 +60,22 @@ class DiscordBotService:
         intents = discord.Intents.default()
         intents.message_content = True  # MUST be enabled in Developer Portal too
         intents.guilds = True
-        intents.members = False
+        intents.members = True  # enable for richer resolution (requires Server Members Intent for large guilds)
 
         self.bot = commands.Bot(command_prefix=command_prefix, intents=intents)
         self._wire_events()
 
         self._task: Optional[asyncio.Task] = None
         self._running = asyncio.Event()
+
+        # Lightweight directory
+        # Users
+        self._users_by_id: Dict[int, Dict[str, Any]] = {}  # id -> {username, discriminator, display_name_by_guild:{gid:name}}
+        self._usernames_index: Dict[str, Set[int]] = {}     # lower(username or "name#disc") -> set(ids)
+        self._displaynames_index_by_guild: Dict[int, Dict[str, Set[int]]] = {}  # gid -> lower(display) -> set(ids)
+        # Channels
+        self._channels_by_id: Dict[int, Dict[str, Any]] = {}  # id -> {name, guild_id}
+        self._channels_by_name_by_guild: Dict[int, Dict[str, int]] = {}  # gid -> lower(name) -> id
 
     def _wire_events(self) -> None:
         @self.bot.event
@@ -89,7 +87,20 @@ class DiscordBotService:
                 self.respond_mode,
                 self.read_only,
             )
+            # Preload channels/usernames we can access (best effort)
+            try:
+                for guild in self.bot.guilds:
+                    await self._index_guild(guild)
+            except Exception:
+                logger.exception("Pre-indexing guilds failed")
             self._running.set()
+
+        @self.bot.event
+        async def on_guild_join(guild: discord.Guild):
+            try:
+                await self._index_guild(guild)
+            except Exception:
+                logger.exception("Indexing new guild failed")
 
         @self.bot.event
         async def on_message(message: discord.Message):
@@ -117,6 +128,12 @@ class DiscordBotService:
                 mentions_bot,
                 len(content),
             )
+
+            # Update directory from this message context
+            try:
+                self._update_directory_from_message(message)
+            except Exception:
+                logger.exception("Directory update failed")
 
             # Lightweight ingest only (do NOT generate an LLM reply here)
             asyncio.create_task(self._lightweight_ingest(message))
@@ -147,6 +164,71 @@ class DiscordBotService:
         @self.bot.command(name="ping")
         async def ping(ctx: commands.Context):
             await ctx.reply("pong")
+
+    async def _index_guild(self, guild: discord.Guild):
+        # Index channels
+        try:
+            for ch in guild.text_channels:
+                self._channels_by_id[ch.id] = {"name": ch.name, "guild_id": guild.id}
+                self._channels_by_name_by_guild.setdefault(guild.id, {})[ch.name.lower()] = ch.id
+        except Exception:
+            logger.exception("Indexing channels failed for guild %s", guild.id)
+
+        # Index members (best effort; may be partial without privileged intent)
+        try:
+            async for member in guild.fetch_members(limit=None):
+                self._index_member(member)
+        except Exception:
+            # Fallback: only cache members we see in messages
+            logger.debug("fetch_members not available or failed for guild %s", guild.id)
+
+    def _index_member(self, member: discord.Member):
+        uid = member.id
+        username = member.name or ""
+        discriminator = getattr(member, "discriminator", None)
+        display = member.display_name or ""
+        # Users by ID
+        entry = self._users_by_id.setdefault(uid, {"username": username, "discriminator": discriminator, "display_name_by_guild": {}})
+        entry["username"] = username or entry.get("username") or ""
+        entry["discriminator"] = discriminator if discriminator is not None else entry.get("discriminator")
+        entry["display_name_by_guild"][member.guild.id] = display
+        # Username/global index (username and name#disc string)
+        key1 = (username or "").lower()
+        if key1:
+            self._usernames_index.setdefault(key1, set()).add(uid)
+        if discriminator and username:
+            key2 = f"{username}#{discriminator}".lower()
+            self._usernames_index.setdefault(key2, set()).add(uid)
+        # Display name in this guild
+        if display:
+            self._displaynames_index_by_guild.setdefault(member.guild.id, {}).setdefault(display.lower(), set()).add(uid)
+
+    def _update_directory_from_message(self, message: discord.Message):
+        # User
+        if isinstance(message.author, (discord.Member, discord.User)):
+            if isinstance(message.author, discord.Member):
+                self._index_member(message.author)
+            else:
+                uid = message.author.id
+                username = message.author.name or ""
+                discriminator = getattr(message.author, "discriminator", None)
+                entry = self._users_by_id.setdefault(uid, {"username": username, "discriminator": discriminator, "display_name_by_guild": {}})
+                entry["username"] = username or entry.get("username") or ""
+                entry["discriminator"] = discriminator if discriminator is not None else entry.get("discriminator")
+                key1 = (username or "").lower()
+                if key1:
+                    self._usernames_index.setdefault(key1, set()).add(uid)
+                if discriminator and username:
+                    key2 = f"{username}#{discriminator}".lower()
+                    self._usernames_index.setdefault(key2, set()).add(uid)
+
+        # Channel
+        ch = message.channel
+        if isinstance(ch, (discord.TextChannel, discord.Thread)):
+            base = ch.parent if isinstance(ch, discord.Thread) else ch
+            self._channels_by_id[base.id] = {"name": base.name, "guild_id": base.guild.id if base.guild else None}
+            if base.guild:
+                self._channels_by_name_by_guild.setdefault(base.guild.id, {})[base.name.lower()] = base.id
 
     async def _lightweight_ingest(self, message: discord.Message) -> None:
         """
@@ -239,6 +321,127 @@ class DiscordBotService:
         except Exception:
             logger.exception("Failed to send reply")
 
+    async def send_dm(self, user_id: int, content: str) -> None:
+        """Send a DM by numeric user ID."""
+        try:
+            user = await self.bot.fetch_user(user_id)
+            for part in _chunk_text(content):
+                await user.send(part)
+        except Exception:
+            logger.exception("Failed to send DM to %s", user_id)
+
+    async def send_channel_message(self, channel_id: int, content: str) -> None:
+        """Send a message to a text-capable channel by numeric ID."""
+        try:
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            if isinstance(channel, (discord.TextChannel, discord.Thread, discord.DMChannel)):
+                for part in _chunk_text(content):
+                    await channel.send(part)
+            else:
+                logger.warning("Channel %s not a text-capable channel", channel_id)
+        except Exception:
+            logger.exception("Failed to send message to channel %s", channel_id)
+
+    # --- Target resolution and convenience sends ---
+
+    def resolve_user(self, target: str, guild_id: Optional[int] = None) -> Optional[int]:
+        """
+        Resolve a user target to ID:
+        - raw ID: "1234567890"
+        - mention: "<@123...>" or "<@!123...>"
+        - "@name" or "name"
+        - "name#1234" (legacy discriminator)
+        Priority: guild display name -> username -> name#disc -> global partial match.
+        """
+        if not target:
+            return None
+        target = target.strip()
+        # Raw digits or mention
+        if any(ch.isdigit() for ch in target):
+            maybe = _only_digits(target)
+            if maybe:
+                return maybe
+
+        # Strip leading "@"
+        name = target[1:] if target.startswith("@") else target
+        name_l = name.lower()
+
+        # Prefer guild display names
+        if guild_id is not None:
+            by_guild = self._displaynames_index_by_guild.get(guild_id, {})
+            # Exact
+            ids = by_guild.get(name_l)
+            if ids:
+                return next(iter(ids))
+            # Startswith or contains (best-effort)
+            for key, ids in by_guild.items():
+                if key.startswith(name_l) or name_l in key:
+                    return next(iter(ids))
+
+        # Try username/global exact
+        ids = self._usernames_index.get(name_l)
+        if ids:
+            return next(iter(ids))
+
+        # Fuzzy: startswith on username keys
+        for key, ids in self._usernames_index.items():
+            if key.startswith(name_l) or name_l in key:
+                return next(iter(ids))
+
+        return None
+
+    def resolve_channel(self, target: str, guild_id: Optional[int] = None) -> Optional[int]:
+        """
+        Resolve a channel target to ID:
+        - raw ID: "123..."
+        - mention: "<#123...>"
+        - "#name" or "name"
+        Prefer channels in the provided guild when possible.
+        """
+        if not target:
+            return None
+        target = target.strip()
+        if any(ch.isdigit() for ch in target):
+            maybe = _only_digits(target)
+            if maybe:
+                return maybe
+        # Strip leading "#"
+        name = target[1:] if target.startswith("#") else target
+        name_l = name.lower()
+
+        if guild_id is not None:
+            by_name = self._channels_by_name_by_guild.get(guild_id, {})
+            ch_id = by_name.get(name_l)
+            if ch_id:
+                return ch_id
+            # fuzzy
+            for key, cid in by_name.items():
+                if key.startswith(name_l) or name_l in key:
+                    return cid
+
+        # Fallback: any guild
+        for gid, by_name in self._channels_by_name_by_guild.items():
+            ch_id = by_name.get(name_l)
+            if ch_id:
+                return ch_id
+            for key, cid in by_name.items():
+                if key.startswith(name_l) or name_l in key:
+                    return cid
+
+        return None
+
+    async def send_dm_target(self, target: str, content: str, guild_id: Optional[int] = None) -> None:
+        uid = self.resolve_user(target, guild_id=guild_id)
+        if uid is None:
+            raise ValueError(f"Could not resolve user target: {target}")
+        await self.send_dm(uid, content)
+
+    async def send_channel_target(self, target: str, content: str, guild_id: Optional[int] = None) -> None:
+        cid = self.resolve_channel(target, guild_id=guild_id)
+        if cid is None:
+            raise ValueError(f"Could not resolve channel target: {target}")
+        await self.send_channel_message(cid, content)
+
     async def _should_reply(self, message: discord.Message) -> bool:
         is_dm = message.guild is None
         content = message.content or ""
@@ -300,24 +503,3 @@ class DiscordBotService:
         await self.bot.close()
         if self._task and not self._task.done():
             self._task.cancel()
-
-    # Public helpers to send messages programmatically
-
-    async def send_dm(self, user_id: int, content: str) -> None:
-        try:
-            user = await self.bot.fetch_user(user_id)
-            for part in _chunk_text(content):
-                await user.send(part)
-        except Exception:
-            logger.exception("Failed to send DM to %s", user_id)
-
-    async def send_channel_message(self, channel_id: int, content: str) -> None:
-        try:
-            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
-            if isinstance(channel, (discord.TextChannel, discord.Thread, discord.DMChannel)):
-                for part in _chunk_text(content):
-                    await channel.send(part)
-            else:
-                logger.warning("Channel %s not a text-capable channel", channel_id)
-        except Exception:
-            logger.exception("Failed to send message to channel %s", channel_id)

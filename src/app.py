@@ -87,6 +87,25 @@ async def main():
     # Start Discord bot if configured
     discord_service = await start_discord_bot(agent)
 
+    try:
+        from src.agents.tools.discord_smol import DiscordSendChannelTool
+        codeexec_rt = agent.registry.get("codeexec")
+        if codeexec_rt and hasattr(codeexec_rt.impl, "allowed_tools"):
+            codeexec_rt.impl.allowed_tools.append(DiscordSendChannelTool(discord_service))
+            logger.info("Added DiscordSendChannelTool to CodeAgent allowed tools")
+    except Exception as e:
+        logger.exception("Failed to add Discord smol tools: %s", e)
+
+    # Register the Discord tool so the LLM can send DMs or channel messages on its own
+    if discord_service:
+        try:
+            from src.agents.tools.discord import DiscordTool
+            discord_tool = DiscordTool(discord_service)
+            agent.registry.register("discord", discord_tool, DiscordTool.spec())
+            logger.info("Registered 'discord' tool for LLM")
+        except Exception as e:
+            logger.exception("Failed to register Discord tool: %s", e)
+
     print("Agent + Dashboard running (VM) at http://<vm-ip>:8008")
     if discord_service:
         print("Discord bot is running")
@@ -107,7 +126,7 @@ async def main():
                 store.set_setting("voice_enabled", "0")
                 print("Voice disabled.")
                 continue
-            # Pass source + minimal metadata so agent can distinguish CLI vs Discord
+            # Keep CLI conversational; no static commands. Provide source="cli" for awareness.
             resp = await agent.handle_user_message(user, source="cli", external_metadata={"tag": "cli"})
             print("Agent:", resp)
     finally:

@@ -1,6 +1,8 @@
 import asyncio
 import os
 import time
+import json
+import re
 from typing import Any, Dict, Optional
 
 from src.agents.state import SharedState
@@ -48,6 +50,7 @@ CRITICAL RULES:
 - Output ONLY the JSON - no other text before or after
 - Do NOT generate code, tests, examples, or documentation in your {"text": "..."} responses
 - Be warm and conversational in your {"text": "..."} responses
+- NEVER print a tool call inside {"text": "..."}; if you intend to use a tool, return ONLY the {"tool_call": {...}} JSON.
 
 WHEN TO USE EACH FORMAT:
 - User: "Hello" → {"text": "Hello! How can I help you today?"}
@@ -95,6 +98,54 @@ class MainAgent:
             if rt.stats.enabled:
                 specs.append(rt.spec)
         return specs
+
+    @staticmethod
+    def _extract_tool_call_from_text(text: str) -> Optional[Dict[str, Any]]:
+        """
+        If the model mistakenly printed a tool_call blob inside normal text,
+        try to extract and parse it. Supports:
+        - Bare JSON: {"tool_call": {...}}
+        - Wrapped in code fences ```json ... ```
+        - Extra prose before/after
+        Returns a dict like {"name": "...", "arguments": {...}} or None.
+        """
+        if not text:
+            return None
+        s = text.strip()
+
+        # Strip common code fences
+        fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", s, flags=re.DOTALL | re.IGNORECASE)
+        if fence_match:
+            s = fence_match.group(1).strip()
+
+        # Try direct parse
+        def try_parse(candidate: str) -> Optional[Dict[str, Any]]:
+            try:
+                obj = json.loads(candidate)
+                if isinstance(obj, dict) and "tool_call" in obj and isinstance(obj["tool_call"], dict):
+                    name = obj["tool_call"].get("name")
+                    args = obj["tool_call"].get("arguments", {})
+                    if isinstance(name, str) and isinstance(args, dict):
+                        return {"name": name, "arguments": args}
+            except Exception:
+                pass
+            return None
+
+        tc = try_parse(s)
+        if tc:
+            return tc
+
+        # Locate a JSON object containing "tool_call"
+        if "tool_call" in s:
+            idx = s.find("tool_call")
+            start = s.rfind("{", 0, idx)
+            if start != -1:
+                for end in range(len(s), start, -1):
+                    candidate = s[start:end].strip()
+                    tc = try_parse(candidate)
+                    if tc:
+                        return tc
+        return None
 
     async def handle_user_message(
         self,
@@ -193,6 +244,13 @@ class MainAgent:
                     return "Sorry — something went wrong handling memory. Please try again."
             return None
 
+        # Repair: if the model printed a tool_call inside text, extract and use it
+        if not out.get("tool_call"):
+            raw_text0 = (out.get("text", "") or "").strip()
+            tc = self._extract_tool_call_from_text(raw_text0)
+            if tc:
+                out = {"tool_call": tc}
+
         if out.get("tool_call"):
             tool_name = out["tool_call"]["name"]
             args = out["tool_call"].get("arguments", {}) or {}
@@ -241,7 +299,7 @@ class MainAgent:
                 return final_text
             except asyncio.TimeoutError:
                 self.registry.record_failure(tool_name, "timeout")
-                await self.bus.publish("tool.error", {"name": tool_name, "error": "timeout"})
+                await self.bus.publish("tool.error", {"name": "tool_name", "error": "timeout"})
                 if self.notifier.speak_on_error:
                     await self.notifier.alert("There is a problem with my AI.")
                 msg = f"{tool_name} timed out. I can try another approach."
@@ -259,6 +317,7 @@ class MainAgent:
             text = (out.get("text", "") or "").strip()
             if not text:
                 # Heuristic fallback for empty model output, e.g., remember/recall requests
+                fb = await self._memory_fallback_if_needed  # type: ignore  # prevent linter errors if IDE caches
                 fb = await _memory_fallback_if_needed(empty_text=True)
                 if fb:
                     await self.bus.publish("agent.output", {"text": fb})

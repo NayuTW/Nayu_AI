@@ -37,9 +37,16 @@ class MemoryTool:
 
     @staticmethod
     def spec():
+        # Add examples into description so the model understands typical calls.
         return {
             "name": "memory",
-            "description": "Store or retrieve long term memory using local embeddings.",
+            "description": (
+                "Store or retrieve long term memory using local embeddings. "
+                "Use 'remember' when the user asks to store something, and 'recall' to look it up.\n"
+                "Examples:\n"
+                '- {"action":"remember","text":"Nayu prefers night mode","metadata":{"tag":"cli"}}\n'
+                '- {"action":"recall","text":"Nayu night mode","k":3}'
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {

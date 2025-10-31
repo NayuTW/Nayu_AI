@@ -223,4 +223,5 @@ neuttsair/
 *.gguf
 
 # Modelfiles
-/Modelfile
+Modelfile
+ModelfileR1
