@@ -1,7 +1,3 @@
-"""
-Main application entry point using smolagents architecture.
-This is the new version that uses smolagents CodeAgent for the main orchestrator.
-"""
 import asyncio
 import time
 import uvicorn
@@ -16,16 +12,14 @@ from src.agents.core.health import HealthChecker
 from src.agents.core.store import SQLiteStore
 from src.agents.notify.notifier import Notifier
 from src.agents.notify.error_speaker import ErrorSpeaker
-from src.agents.tools.speech_smol import SpeechSmolTool
-from src.agents.main_agent_smol import MainAgentSmol
+from src.agents.tools.speech import SpeechTool
+from src.agents.main_agent import MainAgent
 
 from src.dashboard.server import init_dashboard
 
 logger = logging.getLogger(__name__)
 
-
 async def start_dashboard(bus, registry, health, store, notifier):
-    """Start the FastAPI dashboard server."""
     from src.dashboard.server import app
     init_dashboard(bus, registry, health, store, notifier)
     host = os.getenv("AGENT_DASH_HOST", "0.0.0.0")
@@ -33,7 +27,6 @@ async def start_dashboard(bus, registry, health, store, notifier):
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
     await server.serve()
-
 
 async def start_discord_bot(agent):
     """Start Discord bot service if DISCORD_BOT_TOKEN is set."""
@@ -46,7 +39,7 @@ async def start_discord_bot(agent):
         from src.integrations.discord_bot import DiscordBotService
         
         # Configure Discord bot
-        respond_mode = os.getenv("DISCORD_RESPOND_MODE", "mention")
+        respond_mode = os.getenv("DISCORD_RESPOND_MODE", "mention")  # passive, mention, prefix, all
         command_prefix = os.getenv("DISCORD_COMMAND_PREFIX", "!")
         read_only = os.getenv("DISCORD_READ_ONLY", "false").lower() == "true"
         
@@ -65,75 +58,46 @@ async def start_discord_bot(agent):
         logger.exception("Failed to start Discord bot: %s", e)
         return None
 
-
 async def main():
-    """Main application entry point."""
-    # Initialize core infrastructure
     state = SharedState()
     store = SQLiteStore()
     bus = EventBus(store=store)
     registry = ToolRegistry(store=store)
 
-    # Initialize notifier
     speak_on_error = store.get_setting("speak_on_error", "1") == "1"
     voice_enabled = store.get_setting("voice_enabled", "0") == "1"
 
-    try:
-        speech_tool = SpeechSmolTool()
-        notifier = Notifier(speech_tool=speech_tool, voice_enabled=voice_enabled, speak_on_error=speak_on_error)
-    except Exception as e:
-        logger.warning(f"Could not initialize speech tool for notifier: {e}")
-        notifier = Notifier(speech_tool=None, voice_enabled=False, speak_on_error=speak_on_error)
+    speech_tool = SpeechTool(state)
+    notifier = Notifier(speech_tool=speech_tool, voice_enabled=voice_enabled, speak_on_error=speak_on_error)
 
     store.set_setting("speak_on_error", "1" if speak_on_error else "0")
     store.set_setting("voice_enabled", "1" if voice_enabled else "0")
 
-    # Create session ID
     session_id = f"session-{int(time.time())}-{uuid.uuid4().hex[:8]}"
-    
-    # Initialize main agent (smolagents CodeAgent)
-    logger.info("Initializing MainAgentSmol with smolagents CodeAgent...")
-    agent = MainAgentSmol(
-        state=state,
-        bus=bus,
-        registry=registry,
-        notifier=notifier,
-        store=store,
-        session_id=session_id
-    )
+    agent = MainAgent(state=state, bus=bus, registry=registry, notifier=notifier, store=store, session_id=session_id)
 
-    # Start health checker
     health = HealthChecker(bus=bus, interval_s=15)
     await health.start()
 
-    # Start error speaker
-    error_speaker = ErrorSpeaker(
-        bus=bus,
-        registry=registry,
-        notifier=notifier,
-        line="There is a problem with my AI.",
-        interval_s=10
-    )
+    error_speaker = ErrorSpeaker(bus=bus, registry=registry, notifier=notifier, line="There is a problem with my AI.", interval_s=10)
     await error_speaker.start()
 
-    # Start dashboard
     asyncio.create_task(start_dashboard(bus, registry, health, store, notifier))
     
     # Start Discord bot if configured
     discord_service = await start_discord_bot(agent)
 
-    # Try to add Discord tools to codeexec if available
-    if discord_service:
-        try:
-            from src.agents.tools.discord_smol import DiscordSendChannelTool
-            codeexec_rt = agent.registry.get("codeexec")
-            if codeexec_rt and hasattr(codeexec_rt.impl, "allowed_tools"):
-                codeexec_rt.impl.allowed_tools.append(DiscordSendChannelTool(discord_service))
-                logger.info("Added DiscordSendChannelTool to CodeAgent allowed tools")
-        except Exception as e:
-            logger.exception("Failed to add Discord smol tools: %s", e)
+    try:
+        from src.agents.tools.discord_smol import DiscordSendChannelTool
+        codeexec_rt = agent.registry.get("codeexec")
+        if codeexec_rt and hasattr(codeexec_rt.impl, "allowed_tools"):
+            codeexec_rt.impl.allowed_tools.append(DiscordSendChannelTool(discord_service))
+            logger.info("Added DiscordSendChannelTool to CodeAgent allowed tools")
+    except Exception as e:
+        logger.exception("Failed to add Discord smol tools: %s", e)
 
-        # Register the Discord tool so the LLM can send DMs or channel messages
+    # Register the Discord tool so the LLM can send DMs or channel messages on its own
+    if discord_service:
         try:
             from src.agents.tools.discord import DiscordTool
             discord_tool = DiscordTool(discord_service)
@@ -142,57 +106,34 @@ async def main():
         except Exception as e:
             logger.exception("Failed to register Discord tool: %s", e)
 
-    # Print startup information
-    print("=" * 60)
-    print("Nayu_AI Agent + Dashboard (smolagents architecture)")
-    print("=" * 60)
-    print(f"Dashboard: http://<vm-ip>:8008")
+    print("Agent + Dashboard running (VM) at http://<vm-ip>:8008")
     if discord_service:
-        print("Discord bot: RUNNING")
-    print()
-    print("Commands:")
-    print("  'voice on'  - Enable voice notifications")
-    print("  'voice off' - Disable voice notifications")
-    print("  'quit'      - Exit the application")
-    print("=" * 60)
-    print()
+        print("Discord bot is running")
+    print("Type 'voice on' or 'voice off' to toggle voice; 'quit' to exit.")
     
     try:
         while True:
-            try:
-                user = await asyncio.to_thread(input, "You: ")
-            except EOFError:
-                break
-            
+            user = await asyncio.to_thread(input,"You: ")
             if user.strip().lower() == "quit":
                 break
-            
             if user.strip().lower() == "voice on":
                 notifier.set_voice(True)
                 store.set_setting("voice_enabled", "1")
                 print("Voice enabled.")
                 continue
-            
             if user.strip().lower() == "voice off":
                 notifier.set_voice(False)
                 store.set_setting("voice_enabled", "0")
                 print("Voice disabled.")
                 continue
-            
-            # Process user message
-            resp = await agent.handle_user_message(
-                user,
-                source="cli",
-                external_metadata={"tag": "cli"}
-            )
-            print(f"Agent: {resp}")
-    
+            # Keep CLI conversational; no static commands. Provide source="cli" for awareness.
+            resp = await agent.handle_user_message(user, source="cli", external_metadata={"tag": "cli"})
+            print("Agent:", resp)
     finally:
         # Cleanup Discord bot on exit
         if discord_service:
             logger.info("Shutting down Discord bot...")
             await discord_service.stop()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
