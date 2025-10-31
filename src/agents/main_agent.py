@@ -76,7 +76,7 @@ class MainAgent:
         
         # Allow model to be configured via environment variable
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
-        self.llm = OllamaLLM(model=model_name, json_mode=True, num_ctx=12000)
+        self.llm = OllamaLLM(model=model_name, json_mode=True, num_ctx=24576)
 
         webbrowser = WebBrowserTool(state)
         desktop = DesktopTool(state)
