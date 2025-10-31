@@ -1,0 +1,155 @@
+"""
+SpeechTool converted to smolagents Tool class.
+Handles speech-to-text and text-to-speech.
+"""
+import os
+from typing import Optional
+from smolagents import Tool
+
+try:
+    from faster_whisper import WhisperModel
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
+
+try:
+    from neuttsair.neutts import NeuTTSAir
+    import soundfile as sf
+    TTS_AVAILABLE = True
+except ImportError:
+    TTS_AVAILABLE = False
+
+
+class SpeechSmolTool(Tool):
+    """
+    Transcribe audio files or generate speech from text.
+    """
+    name = "speech"
+    description = (
+        "Transcribe audio files to text or generate speech from text. "
+        "Use action='transcribe' with path to audio file, "
+        "or action='speak' with text to generate speech."
+    )
+    inputs = {
+        "action": {
+            "type": "string",
+            "description": "Action: 'transcribe' for STT or 'speak' for TTS"
+        },
+        "path": {
+            "type": "string",
+            "description": "Path to audio file (for transcribe action)",
+            "nullable": True
+        },
+        "text": {
+            "type": "string",
+            "description": "Text to speak (for speak action)",
+            "nullable": True
+        }
+    }
+    output_type = "string"
+    
+    def __init__(
+        self,
+        stt_model_size: str = "small.en",
+        tts_ref_audio: str = "",
+        tts_ref_text: str = ""
+    ):
+        super().__init__()
+        
+        # Initialize STT
+        if not WHISPER_AVAILABLE:
+            self.stt = None
+        else:
+            self.stt = WhisperModel(stt_model_size, compute_type="int8_float16")
+        
+        # Initialize TTS
+        self.tts = None
+        self.tts_available = TTS_AVAILABLE
+        self.ref_audio_path = tts_ref_audio or os.getenv("TTS_REF_AUDIO", "")
+        self.ref_text = tts_ref_text or os.getenv("TTS_REF_TEXT", "")
+        self.ref_codes = None
+        
+        if TTS_AVAILABLE:
+            self.NeuTTSAir = NeuTTSAir
+            self.sf = sf
+    
+    def _init_tts(self):
+        """Lazy initialize TTS model."""
+        if not self.tts_available:
+            return False
+        
+        try:
+            self.tts = self.NeuTTSAir(
+                backbone_repo="neuphonic/neutts-air-q4-gguf",
+                backbone_device="cpu",
+                codec_repo="neuphonic/neucodec-onnx-decoder",
+                codec_device="cpu"
+            )
+            
+            # Pre-encode reference if available
+            if self.ref_audio_path and os.path.exists(self.ref_audio_path):
+                self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
+                # Load reference text if it's a file path
+                if self.ref_text and os.path.exists(self.ref_text):
+                    with open(self.ref_text, "r") as f:
+                        self.ref_text = f.read().strip()
+            return True
+        except Exception as e:
+            return False
+    
+    def forward(
+        self,
+        action: str,
+        path: Optional[str] = None,
+        text: Optional[str] = None
+    ) -> str:
+        """Execute speech action and return result."""
+        if action == "transcribe":
+            if not path:
+                return "Error: 'path' required for transcribe action"
+            
+            if not self.stt:
+                return "Error: Whisper STT not available. Install faster-whisper"
+            
+            if not os.path.exists(path):
+                return f"Error: Audio file not found at path: {path}"
+            
+            try:
+                segments, info = self.stt.transcribe(path, beam_size=1, vad_filter=True)
+                transcript = "".join([seg.text for seg in segments])
+                return f"Transcript: {transcript}"
+            except Exception as e:
+                return f"Error transcribing audio: {str(e)}"
+        
+        elif action == "speak":
+            if not text:
+                return "Error: 'text' required for speak action"
+            
+            if not self.tts_available:
+                return f"TTS not available. Would speak: {text}"
+            
+            # Initialize TTS if needed
+            if self.tts is None:
+                if not self._init_tts():
+                    return f"TTS initialization failed. Would speak: {text}"
+            
+            try:
+                out_path = "out.wav"
+                
+                # Check if we have reference audio configured
+                if self.ref_codes is not None and self.ref_text:
+                    # Generate speech with voice cloning
+                    wav = self.tts.infer(text, self.ref_codes, self.ref_text)
+                    self.sf.write(out_path, wav, 24000)
+                    return f"Spoken via NeuTTS-Air, saved to: {out_path}"
+                else:
+                    return (
+                        "NeuTTS-Air requires reference audio and text for voice cloning. "
+                        "Configure tts_ref_audio and tts_ref_text parameters. "
+                        f"Would speak: {text}"
+                    )
+            except Exception as e:
+                return f"Error generating speech: {str(e)}. Would speak: {text}"
+        
+        else:
+            return f"Error: Unknown action '{action}'. Use 'transcribe' or 'speak'"

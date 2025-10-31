@@ -26,6 +26,7 @@ bitsandbytes>=0.43
 safetensors>=0.4
 
 smolagents>=0.0.18
+litellm>=1.0
 
 # NeuTTS-Air TTS dependencies
 librosa>=0.11.0
