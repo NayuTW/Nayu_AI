@@ -49,7 +49,7 @@ class VisionTool:
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": path},
+                    {"type": "image", "image": image},
                     {"type": "text", "text": prompt}
                 ]
             }
