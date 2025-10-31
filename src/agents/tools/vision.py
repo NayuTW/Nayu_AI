@@ -42,7 +42,25 @@ class VisionTool:
             raise FileNotFoundError(f"Image file not found: {path}")
         
         image = Image.open(path).convert("RGB")
-        inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
+        
+        # Use the correct Qwen2-VL chat template format
+        # The model expects messages with image and text content properly structured
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": path},
+                    {"type": "text", "text": prompt}
+                ]
+            }
+        ]
+        
+        # Apply chat template to format the conversation correctly
+        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        
+        # Process with the formatted text and image
+        inputs = self.processor(text=[text], images=[image], return_tensors="pt").to(self.device)
+        
         with torch.inference_mode():
             out = self.model.generate(**inputs, max_new_tokens=256)
         
