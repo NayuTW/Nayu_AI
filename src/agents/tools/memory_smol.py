@@ -112,7 +112,9 @@ class MemorySmolTool(Tool):
             if not text:
                 return "Error: 'text' is required for remember action"
             
-            base_id = doc_id or f"id_{abs(hash(text))}"
+            # Use hashlib for consistent, reliable ID generation
+            import hashlib
+            base_id = doc_id or f"id_{hashlib.md5(text.encode()).hexdigest()[:16]}"
             chunks = _chunk_text(text)
             md = metadata if (metadata and len(metadata) > 0) else {"tag": "general"}
             n = self._add_chunks(base_id, chunks, metadata=md)

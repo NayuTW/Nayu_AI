@@ -28,8 +28,11 @@ def test_imports():
     # Test 2: OllamaLiteLLMModel
     print("\n2. Testing OllamaLiteLLMModel...")
     try:
+        import os
         from src.agents.llm.litellm_model import OllamaLiteLLMModel
-        model = OllamaLiteLLMModel(model_id="llama3.1:8b-instruct-q4_K_M", num_ctx=8192)
+        # Use environment variable or default for testing
+        test_model = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
+        model = OllamaLiteLLMModel(model_id=test_model, num_ctx=8192)
         print(f"   ✓ OllamaLiteLLMModel created: {model}")
         tests.append(("OllamaLiteLLMModel", True, None))
     except Exception as e:

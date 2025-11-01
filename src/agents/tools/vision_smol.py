@@ -50,16 +50,23 @@ class VisionSmolTool(Tool):
         self.processor = None
         self.model = None
     
+    def _get_model_config(self):
+        """Get device-specific model configuration."""
+        is_cuda = self.device == "cuda"
+        return {
+            "dtype": torch.float16 if is_cuda else torch.float32,
+            "load_in_4bit": is_cuda,
+            "device_map": "auto",
+            "trust_remote_code": True
+        }
+    
     def setup(self):
         """Lazy load the model on first use."""
         if self.model is None:
             self.processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=True)
             self.model = AutoModelForImageTextToText.from_pretrained(
                 self.model_id,
-                dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                load_in_4bit=True if self.device == "cuda" else False,
-                device_map="auto",
-                trust_remote_code=True
+                **self._get_model_config()
             )
         super().setup()
     

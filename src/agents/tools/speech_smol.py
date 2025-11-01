@@ -134,7 +134,10 @@ class SpeechSmolTool(Tool):
                     return f"TTS initialization failed. Would speak: {text}"
             
             try:
-                out_path = "out.wav"
+                import time
+                import uuid
+                # Use unique filename to avoid conflicts
+                out_path = f"out_{int(time.time())}_{uuid.uuid4().hex[:8]}.wav"
                 
                 # Check if we have reference audio configured
                 if self.ref_codes is not None and self.ref_text:
