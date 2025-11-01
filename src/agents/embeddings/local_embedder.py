@@ -77,5 +77,8 @@ class LocalEmbedder:
         return tuple(result)
 
     def embed_text(self, text: str) -> List[float]:
-        """Embed single text without caching."""
+        """
+        Embed single text and return as list.
+        Uses internal caching for improved performance on repeated queries.
+        """
         return list(self.embed_text_cached(text))

@@ -125,7 +125,7 @@ async def main():
             except Exception as e:
                 logger.warning(f"Failed to flush store: {e}")
     
-    asyncio.create_task(periodic_flush())
+    flush_task = asyncio.create_task(periodic_flush())
 
     # Start dashboard
     asyncio.create_task(start_dashboard(bus, registry, health, store, notifier))
@@ -199,6 +199,14 @@ async def main():
             print(f"Agent: {resp}")
     
     finally:
+        # Cancel periodic flush task
+        if 'flush_task' in locals():
+            flush_task.cancel()
+            try:
+                await flush_task
+            except asyncio.CancelledError:
+                pass
+        
         # Cleanup Discord bot on exit
         if discord_service:
             logger.info("Shutting down Discord bot...")

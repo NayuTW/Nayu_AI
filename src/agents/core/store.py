@@ -63,7 +63,12 @@ class SQLiteStore:
         self._event_buffer: List[tuple] = []
         self._buffer_size = 10
 
-    def append_event(self, type_: str, payload: Dict[str, Any], ts: Optional[float] = None) -> int:
+    def append_event(self, type_: str, payload: Dict[str, Any], ts: Optional[float] = None) -> Optional[int]:
+        """
+        Append event to buffer for batch insertion.
+        Returns None since actual ID is assigned during flush.
+        For immediate insertion with ID, call flush() after append.
+        """
         ts = ts or time.time()
         data = json.dumps(payload, ensure_ascii=False)
         with self._lock:
@@ -71,19 +76,24 @@ class SQLiteStore:
             self._event_buffer.append((ts, type_, data))
             if len(self._event_buffer) >= self._buffer_size:
                 self._flush_events()
-            # Return an approximate ID (actual ID will be determined on flush)
-            return 0
+            # Return None - actual ID assigned on flush
+            return None
     
     def _flush_events(self):
         """Flush buffered events to database."""
         if not self._event_buffer:
             return
-        with self._conn:
-            self._conn.executemany(
-                "INSERT INTO events (ts, type, payload) VALUES (?, ?, ?)",
-                self._event_buffer,
-            )
-        self._event_buffer.clear()
+        try:
+            with self._conn:
+                self._conn.executemany(
+                    "INSERT INTO events (ts, type, payload) VALUES (?, ?, ?)",
+                    self._event_buffer,
+                )
+            # Only clear buffer after successful insert
+            self._event_buffer.clear()
+        except Exception:
+            # Preserve buffer on error - events will be retried on next flush
+            raise
     
     def flush(self):
         """Public method to flush any pending events."""
