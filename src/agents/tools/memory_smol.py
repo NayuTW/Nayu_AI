@@ -70,9 +70,11 @@ class MemorySmolTool(Tool):
     
     def __init__(self, collection: str = "long_term", embed_model: Optional[str] = None, backend: Optional[str] = None):
         super().__init__()
+        # Use lazy loading for embedder
         self.embedder = LocalEmbedder(
             model_name=embed_model or "intfloat/e5-small-v2",
             backend=backend,
+            lazy_load=True,
         )
         self.client = chromadb.PersistentClient(path=".chroma")
         self.col = self.client.get_or_create_collection(collection)
@@ -92,10 +94,15 @@ class MemorySmolTool(Tool):
         return digest
     
     def _add_chunks(self, base_id: str, chunks: List[str], metadata: Optional[Dict[str, Any]] = None) -> int:
+        """Add chunks with batch embedding."""
+        if not chunks:
+            return 0
         safe_meta = metadata if (metadata and len(metadata) > 0) else {"tag": "general"}
+        # Batch embed all chunks at once
         embs = self.embedder.embed_texts(chunks)
         ids = [f"{base_id}__{i}" for i in range(len(chunks))]
         metas = [dict(safe_meta) for _ in chunks]
+        # Single batch insert to Chroma
         self.col.add(ids=ids, documents=chunks, embeddings=embs, metadatas=metas)
         return len(chunks)
     

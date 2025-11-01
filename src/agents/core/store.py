@@ -10,6 +10,10 @@ os.makedirs(".cache", exist_ok=True)
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+PRAGMA cache_size=-64000;
+PRAGMA temp_store=MEMORY;
+PRAGMA mmap_size=268435456;
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts REAL NOT NULL,
@@ -17,6 +21,7 @@ CREATE TABLE IF NOT EXISTS events (
   payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
 
 CREATE TABLE IF NOT EXISTS tool_metrics (
   tool_name TEXT PRIMARY KEY,
@@ -45,25 +50,45 @@ CREATE TABLE IF NOT EXISTS fine_tune_examples (
   label TEXT NOT NULL DEFAULT 'unlabeled' CHECK(label IN ('good','bad','unlabeled'))
 );
 CREATE INDEX IF NOT EXISTS idx_examples_ts ON fine_tune_examples(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_examples_label ON fine_tune_examples(label);
 """
 
 class SQLiteStore:
     def __init__(self, path: str = DEFAULT_DB_PATH):
         self.path = path
-        self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        self._conn = sqlite3.connect(self.path, check_same_thread=False, timeout=30.0)
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(SCHEMA)
         self._lock = threading.Lock()
+        self._event_buffer: List[tuple] = []
+        self._buffer_size = 10
 
     def append_event(self, type_: str, payload: Dict[str, Any], ts: Optional[float] = None) -> int:
         ts = ts or time.time()
         data = json.dumps(payload, ensure_ascii=False)
-        with self._lock, self._conn:
-            cur = self._conn.execute(
+        with self._lock:
+            # Buffer events for batch insert
+            self._event_buffer.append((ts, type_, data))
+            if len(self._event_buffer) >= self._buffer_size:
+                self._flush_events()
+            # Return an approximate ID (actual ID will be determined on flush)
+            return 0
+    
+    def _flush_events(self):
+        """Flush buffered events to database."""
+        if not self._event_buffer:
+            return
+        with self._conn:
+            self._conn.executemany(
                 "INSERT INTO events (ts, type, payload) VALUES (?, ?, ?)",
-                (ts, type_, data),
+                self._event_buffer,
             )
-            return cur.lastrowid
+        self._event_buffer.clear()
+    
+    def flush(self):
+        """Public method to flush any pending events."""
+        with self._lock:
+            self._flush_events()
 
     def get_recent_events(self, limit: int = 200) -> List[Dict[str, Any]]:
         with self._lock:
@@ -209,3 +234,9 @@ class SQLiteStore:
                 f.write(json.dumps(obj, ensure_ascii=False) + "\n")
                 n += 1
         return n
+    
+    def close(self):
+        """Close database connection and flush pending events."""
+        with self._lock:
+            self._flush_events()
+            self._conn.close()

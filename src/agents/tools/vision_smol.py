@@ -63,11 +63,14 @@ class VisionSmolTool(Tool):
     def setup(self):
         """Lazy load the model on first use."""
         if self.model is None:
-            self.processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=True)
-            self.model = AutoModelForImageTextToText.from_pretrained(
-                self.model_id,
-                **self._get_model_config()
-            )
+            try:
+                self.processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=True)
+                self.model = AutoModelForImageTextToText.from_pretrained(
+                    self.model_id,
+                    **self._get_model_config()
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to load vision model: {e}")
         super().setup()
     
     def forward(self, path: str, prompt: Optional[str] = None) -> str:
