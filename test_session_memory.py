@@ -108,8 +108,10 @@ def test_rolling_window():
         session = manager.get_session("test-session-3")
         assert len(session.messages) <= 5, f"Expected <= 5 messages, got {len(session.messages)}"
         
-        # Check that most recent messages are kept
-        assert "Message 9" in session.messages[-2].content or "Message 8" in session.messages[-2].content
+        # Check that most recent message is preserved (more robust check)
+        last_msg = session.messages[-1]
+        assert last_msg.role == "assistant", "Last message should be assistant response"
+        assert "Response 9" in last_msg.content, "Most recent message should be preserved"
         
         print("   ✓ Rolling window truncation works")
         return True

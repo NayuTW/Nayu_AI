@@ -8,12 +8,15 @@ This module provides session-scoped conversations with:
 - Efficient persistence (JSONL with in-memory LRU cache)
 """
 import json
+import logging
 import os
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -119,7 +122,7 @@ class SessionManager:
     def _get_session_path(self, session_id: str) -> Path:
         """Get the file path for a session."""
         # Sanitize session_id for filesystem
-        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
+        safe_id = "".join(char if char.isalnum() or char in "-_" else "_" for char in session_id)
         return self.session_dir / f"{safe_id}.json"
     
     def _load_session_from_disk(self, session_id: str) -> Optional[SessionState]:
@@ -145,7 +148,7 @@ class SessionManager:
                 turn_count=data.get("turn_count", 0)
             )
         except Exception as e:
-            print(f"Warning: Failed to load session {session_id}: {e}")
+            logger.warning(f"Failed to load session {session_id}: {e}")
             return None
     
     def _save_session_to_disk(self, state: SessionState):
@@ -170,7 +173,7 @@ class SessionManager:
             temp_path.replace(path)
             
         except Exception as e:
-            print(f"Warning: Failed to save session {state.session_id}: {e}")
+            logger.warning(f"Failed to save session {state.session_id}: {e}")
     
     def get_session(self, session_id: str) -> SessionState:
         """
@@ -246,6 +249,11 @@ class SessionManager:
         # Save to disk (write-through cache)
         self._save_session_to_disk(state)
     
+    def _estimate_tokens(self, messages: List[Message]) -> int:
+        """Estimate token count for messages. Rough estimate: 1 token ≈ 4 characters."""
+        total_chars = sum(len(m.content) for m in messages)
+        return total_chars // 4
+    
     def _truncate_messages(self, state: SessionState):
         """Truncate messages to stay within token budget and message limit."""
         # Simple truncation: keep last N messages
@@ -253,15 +261,13 @@ class SessionManager:
             state.messages = state.messages[-self.max_messages:]
         
         # Token-based truncation (approximate)
-        # Rough estimate: 1 token ≈ 4 characters
-        total_chars = sum(len(m.content) for m in state.messages)
-        estimated_tokens = total_chars // 4
+        estimated_tokens = self._estimate_tokens(state.messages)
         
         while estimated_tokens > self.max_tokens and len(state.messages) > 5:
             # Keep at least 5 messages
-            state.messages.pop(0)
-            total_chars = sum(len(m.content) for m in state.messages)
-            estimated_tokens = total_chars // 4
+            removed_msg = state.messages.pop(0)
+            # Subtract the removed message's tokens for efficiency
+            estimated_tokens -= len(removed_msg.content) // 4
     
     def _generate_summary(self, state: SessionState):
         """
