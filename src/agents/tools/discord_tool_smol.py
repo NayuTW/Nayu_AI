@@ -18,6 +18,10 @@ class DiscordSmolTool(Tool):
         "or 'channel' action to send a message to a channel. "
         "Specify target user/channel by name (e.g., '@username' or '#channel-name') or ID."
     )
+    
+    # Timeout for Discord operations (seconds)
+    TIMEOUT = 10.0
+    
     inputs = {
         "action": {
             "type": "string",
@@ -103,7 +107,7 @@ class DiscordSmolTool(Tool):
                 future = asyncio.run_coroutine_threadsafe(coro, bot.loop)
                 try:
                     # Wait for completion with a reasonable timeout
-                    future.result(timeout=10.0)
+                    future.result(timeout=self.TIMEOUT)
                     result = f"{action_desc} sent to {target}"
                 except concurrent.futures.TimeoutError:
                     # Timeout - operation may still complete in background
@@ -119,6 +123,13 @@ class DiscordSmolTool(Tool):
                     result = f"Error: Bot event loop not available for {action_desc}"
                 except RuntimeError:
                     # No running loop - create temporary one (testing scenario)
+                    # Save current loop if any
+                    old_loop = None
+                    try:
+                        old_loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        pass
+                    
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
@@ -126,7 +137,9 @@ class DiscordSmolTool(Tool):
                         result = f"{action_desc} sent to {target}"
                     finally:
                         loop.close()
-                        asyncio.set_event_loop(None)
+                        # Restore previous loop if there was one
+                        if old_loop is not None:
+                            asyncio.set_event_loop(old_loop)
             
             return result
             
