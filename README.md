@@ -88,7 +88,7 @@ virsh net-dhcp-leases default
   - qwen2:7b-instruct-q5_K_M (good tool calling), or llama3.1:8b-instruct-q4_K_M
   - Set num_ctx ~8–12k for 12GB VRAM comfort
 - Vision:
-  - Qwen/Qwen2-VL-2B-Instruct (transformers, 4‑bit), or LLaVA 7B via llava.cpp
+  - gemma3:4b-it-q4_K_M via Ollama (default), or other Ollama vision models
 - Embeddings (CPU‑friendly):
   - intfloat/e5-small-v2 or BAAI/bge-small-en-v1.5 or all-MiniLM-L6-v2
 - Speech:
@@ -150,6 +150,7 @@ virsh net-dhcp-leases default
 - Selenium/Chrome not installed: md_browser dynamic mode will fail; it will still work in static mode
 - bitsandbytes missing GPU wheels: ensure compatible CUDA or run CPU inference for the VLM
 - Desktop control in VM controls the VM desktop, not the host desktop (by design)
+- Desktop tool automatically detects OS and desktop environment (e.g., KDE Plasma, GNOME) and provides OS-specific keyboard shortcut guidance to prevent cross-platform issues
 
 ## Discord Integration
 

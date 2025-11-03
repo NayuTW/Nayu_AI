@@ -118,7 +118,7 @@ Dashboard accessible at:
 - **faster-whisper**: Speech-to-text
 - **NeuTTS-Air**: Text-to-speech with voice cloning
 - **smolagents**: Code execution framework
-- **transformers + bitsandbytes**: For vision models
+- **aiohttp**: For Ollama API communication (vision and LLM)
 
 ### Optional Dependencies
 - **Selenium + Chrome**: For dynamic page rendering in md_browser
@@ -134,7 +134,7 @@ Dashboard accessible at:
 
 ### Ollama Models
 - Main LLM: qwen2:7b-instruct-q5_K_M or llama3.1:8b-instruct-q4_K_M
-- Vision: Qwen2-VL-2B-Instruct (via transformers)
+- Vision: gemma3:4b-it-q4_K_M (via Ollama)
 - Context window: ~8-12k tokens for 12GB VRAM
 
 ### Embeddings

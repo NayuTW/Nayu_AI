@@ -39,11 +39,20 @@ TOOL USAGE:
 - Use tools judiciously - not every request needs a tool
 - memory tool: Use 'remember' to store information, 'recall' to retrieve it
 - webbrowser tool: Search the web, fetch URLs, or research topics
-- desktop tool: Control keyboard/mouse or take screenshots
-- vision tool: Analyze images or screenshots
+- desktop tool: Control keyboard/mouse or take screenshots (returns file path for screenshots)
+- vision tool: Analyze images or screenshots (use the file path from desktop tool)
 - speech tool: Transcribe audio or generate speech
 - codeexec tool: Run Python code for complex tasks
 - discord tool: Send messages to Discord channels or DMs (when available)
+  - Important: Remember to specify the user or channel target to the discord tool
+- When using vision on a screenshot: first call desktop(action='screenshot') to get the path, then call vision(path=<that_path>)
+
+IMPORTANT - Processing Tool Outputs:
+- Tools provide raw information - you must process and interpret this information
+- NEVER directly pass tool output to final_answer() without understanding and summarizing it
+- Read the tool output, understand what it means, then explain it in your own words
+- For vision tool: Get the description, understand what's in the image, then describe it naturally to the user
+- Your response should show understanding, not just echo what the tool said
 
 RESPONSE STYLE:
 - Be direct and conversational
@@ -74,6 +83,7 @@ class MainAgentSmol:
         self.notifier = notifier
         self.store = store
         self.session_id = session_id
+        self.os_context = ""  # Will be populated when desktop tool is initialized
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
@@ -121,6 +131,8 @@ class MainAgentSmol:
                 "name": desktop.name,
                 "description": desktop.description
             })
+            # Capture OS context for system prompt
+            self.os_context = f"\nSYSTEM INFO: Running on {desktop.os_info.get('description', 'Unknown OS')}. {desktop.os_info.get('shortcuts_guide', '')}"
         except Exception as e:
             print(f"Warning: Could not initialize desktop tool: {e}")
         
@@ -227,6 +239,7 @@ class MainAgentSmol:
         
         # Build prompt with context
         full_prompt = f"""{SYSTEM_PROMPT}
+{self.os_context}
 
 CONTEXT:
 {context}

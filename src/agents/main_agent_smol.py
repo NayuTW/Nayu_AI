@@ -39,11 +39,20 @@ TOOL USAGE:
 - Use tools judiciously - not every request needs a tool
 - memory tool: Use 'remember' to store information, 'recall' to retrieve it
 - webbrowser tool: Search the web, fetch URLs, or research topics
-- desktop tool: Control keyboard/mouse or take screenshots
-- vision tool: Analyze images or screenshots
+- desktop tool: Control keyboard/mouse or take screenshots (returns file path for screenshots)
+- vision tool: Analyze images or screenshots (use the file path from desktop tool)
 - speech tool: ALWAYS use when asked to "speak", "say out loud", "read aloud", or generate audio/voice output. Also use for transcribing audio files.
 - codeexec tool: Run Python code for complex tasks
 - discord_agent: Send Discord messages to channels or DMs (when available)
+  - Important: Remember to specify the user or channel target to the discord tool
+- When using vision on a screenshot: first call desktop(action='screenshot') to get the path, then call vision(path=<that_path>)
+
+IMPORTANT - Processing Tool Outputs:
+- Tools provide raw information - you must process and interpret this information
+- NEVER directly pass tool output to final_answer() without understanding and summarizing it
+- Read the tool output, understand what it means, then explain it in your own words
+- For vision tool: Get the description, understand what's in the image, then describe it naturally to the user
+- Your response should show understanding, not just echo what the tool said
 
 RESPONSE STYLE:
 - Be direct and conversational
@@ -74,6 +83,7 @@ class MainAgentSmol:
         self.notifier = notifier
         self.store = store
         self.session_id = session_id
+        self.os_context = ""  # Will be populated when desktop tool is initialized
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
@@ -121,6 +131,8 @@ class MainAgentSmol:
                 "name": desktop.name,
                 "description": desktop.description
             })
+            # Capture OS context for system prompt
+            self.os_context = f"\nSYSTEM INFO: Running on {desktop.os_info.get('description', 'Unknown OS')}. {desktop.os_info.get('shortcuts_guide', '')}"
         except Exception as e:
             print(f"Warning: Could not initialize desktop tool: {e}")
         
@@ -168,8 +180,8 @@ class MainAgentSmol:
     
     def add_discord_tool(self, discord_service):
         """
-        Add Discord agent as a tool that internally uses ToolCallingAgent.
-        This creates a wrapper tool that delegates to a ToolCallingAgent for Discord operations.
+        Add Discord tool to the agent after initialization.
+        This allows Discord integration to be added dynamically when the service is available.
         
         Args:
             discord_service: The Discord bot service instance
@@ -178,13 +190,13 @@ class MainAgentSmol:
             bool: True if successfully added, False otherwise
         """
         try:
-            from src.agents.tools.discord_agent_tool import DiscordAgentTool
+            from src.agents.tools.discord_tool_smol import DiscordSmolTool
             
-            # Create Discord agent tool (wraps ToolCallingAgent)
-            discord_agent_tool = DiscordAgentTool(discord_service, self.model)
+            # Create Discord tool (direct tool, not wrapped in an agent)
+            discord_tool = DiscordSmolTool(discord_service)
             
             # Add to tools list
-            self.tools.append(discord_agent_tool)
+            self.tools.append(discord_tool)
             
             # Reinitialize the main CodeAgent with updated tools
             self.agent = CodeAgent(
@@ -198,15 +210,15 @@ class MainAgentSmol:
             )
             
             # Also register in registry for tracking
-            self.registry.register("discord_agent", discord_agent_tool, {
-                "name": discord_agent_tool.name,
-                "description": discord_agent_tool.description
+            self.registry.register("discord", discord_tool, {
+                "name": discord_tool.name,
+                "description": discord_tool.description
             })
             
-            print("Discord agent tool added successfully")
+            print("Discord tool added successfully")
             return True
         except Exception as e:
-            print(f"Warning: Could not add Discord agent tool: {e}")
+            print(f"Warning: Could not add Discord tool: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -237,6 +249,7 @@ class MainAgentSmol:
         
         # Build prompt with context
         full_prompt = f"""{SYSTEM_PROMPT}
+{self.os_context}
 
 CONTEXT:
 {context}
