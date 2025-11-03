@@ -112,7 +112,10 @@ Minimal changes to the main application:
 | VisionTool | VisionSmolTool | ✓ Converted |
 | MemoryTool | MemorySmolTool | ✓ Converted |
 | SpeechTool | SpeechSmolTool | ✓ Converted |
+| DiscordTool | DiscordSmolTool | ✓ Converted (dynamic) |
 | CodeAgentTool | CodeAgentTool | ✓ Already uses smolagents |
+
+**Note**: The Discord tool is added dynamically when a Discord service is available, allowing the agent to send messages to Discord channels and DMs.
 
 ## Installation
 

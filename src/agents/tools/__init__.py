@@ -32,6 +32,12 @@ try:
 except ImportError:
     pass
 
+try:
+    from .discord_tool_smol import DiscordSmolTool
+    __all__.append("DiscordSmolTool")
+except ImportError:
+    pass
+
 # Legacy tools (for backward compatibility)
 try:
     from .webbrowser import WebBrowserTool

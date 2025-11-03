@@ -43,12 +43,14 @@ TOOL USAGE:
 - vision tool: Analyze images or screenshots
 - speech tool: Transcribe audio or generate speech
 - codeexec tool: Run Python code for complex tasks
+- discord tool: Send messages to Discord channels or DMs (when available)
 
 RESPONSE STYLE:
 - Be direct and conversational
 - Don't mention internal details like tool execution unless relevant
 - Provide helpful, actionable information
-- Keep responses concise but complete"""
+- Keep responses concise but complete
+- Always provide your final response by calling the 'final_answer' function"""
 
 
 class MainAgentSmol:
@@ -163,6 +165,41 @@ class MainAgentSmol:
             self.registry.register("codeexec", codeexec, CodeAgentTool.spec())
         except Exception as e:
             print(f"Warning: Could not initialize codeexec tool: {e}")
+    
+    def add_discord_tool(self, discord_service):
+        """
+        Add Discord tool to the agent after initialization.
+        This allows Discord integration to be added dynamically when the service is available.
+        
+        Args:
+            discord_service: The Discord bot service instance
+        """
+        try:
+            from src.agents.tools.discord_tool_smol import DiscordSmolTool
+            
+            discord_tool = DiscordSmolTool(discord_service)
+            self.tools.append(discord_tool)
+            self.registry.register("discord", discord_tool, {
+                "name": discord_tool.name,
+                "description": discord_tool.description
+            })
+            
+            # Reinitialize the CodeAgent with the updated tool list
+            self.agent = CodeAgent(
+                tools=self.tools,
+                model=self.model,
+                max_steps=15,
+                additional_authorized_imports=[
+                    "requests", "json", "re", "time", "datetime",
+                    "bs4", "duckduckgo_search", "readability", "html2text"
+                ]
+            )
+            
+            print(f"Discord tool added successfully")
+            return True
+        except Exception as e:
+            print(f"Warning: Could not add Discord tool: {e}")
+            return False
     
     async def handle_user_message(
         self,

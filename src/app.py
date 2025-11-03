@@ -122,25 +122,24 @@ async def main():
     # Start Discord bot if configured
     discord_service = await start_discord_bot(agent)
 
-    # Try to add Discord tools to codeexec if available
+    # Add Discord tool to main agent if available
     if discord_service:
         try:
-            from src.agents.tools.discord_smol import DiscordSendChannelTool
-            codeexec_rt = agent.registry.get("codeexec")
-            if codeexec_rt and hasattr(codeexec_rt.impl, "allowed_tools"):
-                codeexec_rt.impl.allowed_tools.append(DiscordSendChannelTool(discord_service))
-                logger.info("Added DiscordSendChannelTool to CodeAgent allowed tools")
+            # Add the smolagents-compatible Discord tool to the main agent
+            if agent.add_discord_tool(discord_service):
+                logger.info("Discord tool integrated into main agent")
+            
+            # Also add Discord tool to CodeAgent's allowed tools for nested execution
+            try:
+                from src.agents.tools.discord_smol import DiscordSendChannelTool
+                codeexec_rt = agent.registry.get("codeexec")
+                if codeexec_rt and hasattr(codeexec_rt.impl, "allowed_tools"):
+                    codeexec_rt.impl.allowed_tools.append(DiscordSendChannelTool(discord_service))
+                    logger.info("Added DiscordSendChannelTool to nested CodeAgent")
+            except Exception as e:
+                logger.exception("Failed to add Discord to nested CodeAgent: %s", e)
         except Exception as e:
-            logger.exception("Failed to add Discord smol tools: %s", e)
-
-        # Register the Discord tool so the LLM can send DMs or channel messages
-        try:
-            from src.agents.tools.discord import DiscordTool
-            discord_tool = DiscordTool(discord_service)
-            agent.registry.register("discord", discord_tool, DiscordTool.spec())
-            logger.info("Registered 'discord' tool for LLM")
-        except Exception as e:
-            logger.exception("Failed to register Discord tool: %s", e)
+            logger.exception("Failed to integrate Discord tool: %s", e)
 
     # Print startup information
     print("=" * 60)
