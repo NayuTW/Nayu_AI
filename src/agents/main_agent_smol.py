@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any, Dict, Optional
 
-from smolagents import CodeAgent
+from smolagents import CodeAgent, ToolCallingAgent
 
 from src.agents.state import SharedState
 from src.agents.llm.litellm_model import OllamaLiteLLMModel
@@ -44,11 +44,15 @@ TOOL USAGE:
 - speech tool: Transcribe audio or generate speech
 - codeexec tool: Run Python code for complex tasks
 
+MANAGED AGENTS:
+- discord_agent: Use this to send Discord messages to channels or DMs (when available)
+
 RESPONSE STYLE:
 - Be direct and conversational
 - Don't mention internal details like tool execution unless relevant
 - Provide helpful, actionable information
-- Keep responses concise but complete"""
+- Keep responses concise but complete
+- Always provide your final response by calling the 'final_answer' function"""
 
 
 class MainAgentSmol:
@@ -85,6 +89,7 @@ class MainAgentSmol:
         
         # Initialize tools
         self.tools = []
+        self.managed_agents = {}
         self._init_tools()
         
         # Initialize CodeAgent
@@ -92,6 +97,7 @@ class MainAgentSmol:
             tools=self.tools,
             model=self.model,
             max_steps=15,
+            managed_agents=self.managed_agents,
             additional_authorized_imports=[
                 "requests", "json", "re", "time", "datetime",
                 "bs4", "duckduckgo_search", "readability", "html2text"
@@ -163,6 +169,59 @@ class MainAgentSmol:
             self.registry.register("codeexec", codeexec, CodeAgentTool.spec())
         except Exception as e:
             print(f"Warning: Could not initialize codeexec tool: {e}")
+    
+    def add_discord_tool(self, discord_service):
+        """
+        Add Discord ToolCallingAgent to managed agents.
+        This creates a sub-agent specifically for handling Discord messages.
+        
+        Args:
+            discord_service: The Discord bot service instance
+        
+        Returns:
+            bool: True if successfully added, False otherwise
+        """
+        try:
+            from src.agents.tools.discord_tool_smol import DiscordSmolTool
+            
+            # Create Discord tool
+            discord_tool = DiscordSmolTool(discord_service)
+            
+            # Create a ToolCallingAgent for Discord operations
+            discord_agent = ToolCallingAgent(
+                tools=[discord_tool],
+                model=self.model,
+                max_steps=3,  # Discord operations are simple, don't need many steps
+            )
+            
+            # Add to managed agents
+            self.managed_agents["discord_agent"] = discord_agent
+            
+            # Reinitialize the main CodeAgent with updated managed_agents
+            self.agent = CodeAgent(
+                tools=self.tools,
+                model=self.model,
+                max_steps=15,
+                managed_agents=self.managed_agents,
+                additional_authorized_imports=[
+                    "requests", "json", "re", "time", "datetime",
+                    "bs4", "duckduckgo_search", "readability", "html2text"
+                ]
+            )
+            
+            # Also register in registry for tracking
+            self.registry.register("discord_agent", discord_agent, {
+                "name": "discord_agent",
+                "description": "Managed agent for sending Discord messages"
+            })
+            
+            print("Discord agent added successfully to managed_agents")
+            return True
+        except Exception as e:
+            print(f"Warning: Could not add Discord agent: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     async def handle_user_message(
         self,
