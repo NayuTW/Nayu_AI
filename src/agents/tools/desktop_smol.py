@@ -99,7 +99,10 @@ class DesktopSmolTool(Tool):
     """
     name = "desktop"
     
-    # Generate OS-aware description
+    # Generate OS-aware description at class definition time.
+    # This is intentional - OS detection happens once at import/startup since
+    # the operating system doesn't change during runtime. For testing different
+    # environments, the module should be reloaded.
     _os_info = get_os_info()
     description = (
         f"Control desktop via keyboard/mouse or take screenshots on {_os_info.get('description', 'Unknown OS')}. "
