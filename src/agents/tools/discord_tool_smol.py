@@ -95,33 +95,38 @@ class DiscordSmolTool(Tool):
                 return f"Error: Unknown action '{action}'. Use 'dm' or 'channel'"
             
             # Execute the coroutine
-            # Check if the Discord bot has a running event loop
+            # The Discord bot runs in its own event loop. We need to schedule the
+            # coroutine in that loop from the agent's thread.
             bot = self.discord_service.bot
             if bot and hasattr(bot, 'loop') and bot.loop and bot.loop.is_running():
-                # Schedule in the bot's event loop from this thread
+                # Schedule in the bot's event loop from this thread and wait for completion
                 future = asyncio.run_coroutine_threadsafe(coro, bot.loop)
-                # Wait for completion with timeout to avoid hanging
                 try:
+                    # Wait for completion with a reasonable timeout
                     future.result(timeout=10.0)
-                    result = f"{action_desc} sent to {target}: {message[:50]}..."
+                    result = f"{action_desc} sent to {target}"
                 except concurrent.futures.TimeoutError:
-                    result = f"{action_desc} scheduled to {target} (async): {message[:50]}..."
+                    # Timeout - operation may still complete in background
+                    result = f"{action_desc} initiated to {target} (operation timed out, may still complete)"
+                except Exception as e:
+                    result = f"Error sending {action_desc}: {str(e)}"
             else:
-                # No bot loop, try to run in current context
+                # Bot loop not available - likely in testing or standalone mode
+                # Try to run synchronously
                 try:
                     loop = asyncio.get_running_loop()
-                    # We're in an async context but not the bot's loop
-                    # This shouldn't happen in normal operation
-                    result = f"Error: Cannot send {action_desc} - bot loop not available"
+                    # Already in an event loop (but not the bot's)
+                    result = f"Error: Bot event loop not available for {action_desc}"
                 except RuntimeError:
-                    # No running loop, create one (testing/standalone context)
+                    # No running loop - create temporary one (testing scenario)
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         loop.run_until_complete(coro)
-                        result = f"{action_desc} sent to {target}: {message[:50]}..."
+                        result = f"{action_desc} sent to {target}"
                     finally:
                         loop.close()
+                        asyncio.set_event_loop(None)
             
             return result
             
