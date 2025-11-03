@@ -219,6 +219,9 @@ neuttsair/
 # .chroma
 .chroma/
 
+# Session files (user-specific conversation history)
+.nayu_ai/
+
 # gguf files
 *.gguf
 
