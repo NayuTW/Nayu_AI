@@ -33,7 +33,10 @@ class EventBus:
                 self._store.append_event(ev.type, ev.payload, ts=ev.ts)
             except Exception:
                 pass
-        for q in list(self._subscribers):
+        # Avoid creating a new list on every publish
+        async with self._lock:
+            subscribers = self._subscribers.copy()
+        for q in subscribers:
             try:
                 q.put_nowait(ev)
             except asyncio.QueueFull:

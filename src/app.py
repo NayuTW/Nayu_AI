@@ -116,6 +116,17 @@ async def main():
     )
     await error_speaker.start()
 
+    # Start periodic database flush task
+    async def periodic_flush():
+        while True:
+            await asyncio.sleep(5)  # Flush every 5 seconds
+            try:
+                store.flush()
+            except Exception as e:
+                logger.warning(f"Failed to flush store: {e}")
+    
+    flush_task = asyncio.create_task(periodic_flush())
+
     # Start dashboard
     asyncio.create_task(start_dashboard(bus, registry, health, store, notifier))
     
@@ -187,10 +198,23 @@ async def main():
             print(f"Agent: {resp}")
     
     finally:
+        # Cancel periodic flush task
+        if 'flush_task' in locals():
+            flush_task.cancel()
+            try:
+                await flush_task
+            except asyncio.CancelledError:
+                pass
+        
         # Cleanup Discord bot on exit
         if discord_service:
             logger.info("Shutting down Discord bot...")
             await discord_service.stop()
+        
+        # Flush any pending database events
+        logger.info("Flushing pending database events...")
+        store.flush()
+        store.close()
 
 
 if __name__ == "__main__":

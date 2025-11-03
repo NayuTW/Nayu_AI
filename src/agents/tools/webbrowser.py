@@ -26,6 +26,19 @@ from src.agents.embeddings.local_embedder import LocalEmbedder
 CACHE_DIR = ".cache/webbrowser"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+# Global session for connection pooling
+_requests_session = None
+
+def _get_requests_session():
+    """Get or create a reusable requests session."""
+    global _requests_session
+    if _requests_session is None:
+        _requests_session = requests.Session()
+        _requests_session.headers.update({
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        })
+    return _requests_session
+
 
 def _hash(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
@@ -85,11 +98,9 @@ def _to_markdown(html: str, base_url: str = "") -> Tuple[str, str]:
 
 
 def _requests_fetch(url: str, timeout: int = 15) -> str:
-    """Fetch HTML using requests (static pages)."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-    }
-    r = requests.get(url, headers=headers, timeout=timeout)
+    """Fetch HTML using requests (static pages) with session pooling."""
+    session = _get_requests_session()
+    r = session.get(url, timeout=timeout)
     r.raise_for_status()
     return r.text
 
@@ -177,7 +188,7 @@ def _domain_from_url(url: str) -> str:
 class EmbeddingRanker:
     """Rank search results using local embeddings."""
     def __init__(self, model_name: str = "intfloat/e5-small-v2"):
-        self.emb = LocalEmbedder(model_name=model_name)
+        self.emb = LocalEmbedder(model_name=model_name, lazy_load=True)
 
     def score(self, query: str, candidates: List[Dict[str, str]]) -> List[Dict[str, Any]]:
         texts = [((c.get("title") or "") + " " + (c.get("body") or "")).strip() for c in candidates]
