@@ -38,6 +38,12 @@ try:
 except ImportError:
     pass
 
+try:
+    from .discord_agent_tool import DiscordAgentTool
+    __all__.append("DiscordAgentTool")
+except ImportError:
+    pass
+
 # Legacy tools (for backward compatibility)
 try:
     from .webbrowser import WebBrowserTool
