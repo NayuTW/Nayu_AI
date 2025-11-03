@@ -93,7 +93,12 @@ class SpeechSmolTool(Tool):
                 # Check if reference is a pre-encoded .pt file
                 if self.ref_audio_path.endswith('.pt'):
                     # Load pre-encoded reference codes directly
-                    self.ref_codes = self.torch.load(self.ref_audio_path)
+                    # Use weights_only=True for security (prevents arbitrary code execution)
+                    try:
+                        self.ref_codes = self.torch.load(self.ref_audio_path, map_location='cpu', weights_only=True)
+                    except TypeError:
+                        # Fallback for older PyTorch versions without weights_only parameter
+                        self.ref_codes = self.torch.load(self.ref_audio_path, map_location='cpu')
                 else:
                     # Fallback: encode raw audio file (backward compatibility)
                     self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
