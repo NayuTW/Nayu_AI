@@ -82,7 +82,7 @@ class MainAgentSmol:
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
             num_ctx=num_ctx,
-            temperature=0.7
+            temperature=0.8
         )
         
         # Initialize tools

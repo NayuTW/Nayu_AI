@@ -32,7 +32,7 @@ class OllamaLiteLLMModel(BaseLiteLLMModel if SMOLAGENTS_AVAILABLE else object):
         api_base: str = "http://localhost:11434",
         api_key: str = "dummy",  # LiteLLM requires an API key parameter even when Ollama doesn't use authentication
         num_ctx: int = 24576,
-        temperature: float = 0.7,
+        temperature: float = 0.8,
         **kwargs
     ):
         if not SMOLAGENTS_AVAILABLE:
