@@ -70,39 +70,48 @@ class DiscordSmolTool(Tool):
             return "Error: No text provided for Discord message"
         
         try:
-            # Get the event loop to run async operations
-            loop = asyncio.get_event_loop()
-            
-            if action == "send_channel":
-                if channel_id:
-                    # Send by channel ID
-                    task = self.discord.send_channel_message(int(channel_id), text)
-                    loop.create_task(task)
-                    return f"Sent message to channel {channel_id}"
-                elif target:
-                    # Send by target (e.g., '#general')
-                    task = self.discord.send_channel_target(target, text, guild_id=guild_id)
-                    loop.create_task(task)
-                    return f"Sent message to {target}"
+            # Define the async operation
+            async def send_discord_message():
+                if action == "send_channel":
+                    if channel_id:
+                        await self.discord.send_channel_message(int(channel_id), text)
+                        return f"Sent message to channel {channel_id}"
+                    elif target:
+                        await self.discord.send_channel_target(target, text, guild_id=guild_id)
+                        return f"Sent message to {target}"
+                    else:
+                        return "Error: Provide 'channel_id' or 'target' for send_channel action"
+                
+                elif action == "send_dm":
+                    if user_id:
+                        await self.discord.send_dm(int(user_id), text)
+                        return f"Sent DM to user {user_id}"
+                    elif target:
+                        await self.discord.send_dm_target(target, text, guild_id=guild_id)
+                        return f"Sent DM to {target}"
+                    else:
+                        return "Error: Provide 'user_id' or 'target' for send_dm action"
+                
                 else:
-                    return "Error: Provide 'channel_id' or 'target' for send_channel action"
+                    return f"Error: Unknown action '{action}'. Use 'send_channel' or 'send_dm'"
             
-            elif action == "send_dm":
-                if user_id:
-                    # Send DM by user ID
-                    task = self.discord.send_dm(int(user_id), text)
-                    loop.create_task(task)
-                    return f"Sent DM to user {user_id}"
-                elif target:
-                    # Send DM by target (e.g., '@alice')
-                    task = self.discord.send_dm_target(target, text, guild_id=guild_id)
-                    loop.create_task(task)
-                    return f"Sent DM to {target}"
+            # Try to get the running event loop (Discord bot's loop)
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context, create a task and schedule it
+                # Use asyncio.create_task to schedule the coroutine
+                future = asyncio.ensure_future(send_discord_message(), loop=loop)
+                # Return immediately without waiting (fire and forget)
+                return "Discord message scheduled for delivery"
+            except RuntimeError:
+                # No running loop, try to use the Discord bot's loop
+                if hasattr(self.discord, 'bot') and hasattr(self.discord.bot, 'loop'):
+                    loop = self.discord.bot.loop
+                    # Schedule the coroutine on the bot's event loop
+                    asyncio.run_coroutine_threadsafe(send_discord_message(), loop)
+                    return "Discord message scheduled for delivery"
                 else:
-                    return "Error: Provide 'user_id' or 'target' for send_dm action"
-            
-            else:
-                return f"Error: Unknown action '{action}'. Use 'send_channel' or 'send_dm'"
+                    return "Error: No event loop available for Discord operations"
         
         except Exception as e:
             return f"Error sending Discord message: {str(e)}"
