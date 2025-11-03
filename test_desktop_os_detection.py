@@ -21,9 +21,10 @@ def test_os_detection():
         from src.agents.tools.desktop_smol import get_os_info
         os_info = get_os_info()
         print(f"   ✓ OS detection successful")
-        print(f"     OS Type: {os_info['os']}")
-        print(f"     Description: {os_info['description']}")
-        print(f"     Shortcuts Guide: {os_info['shortcuts_guide'][:100]}...")
+        print(f"     OS Type: {os_info.get('os', 'Unknown')}")
+        print(f"     Description: {os_info.get('description', 'Unknown')}")
+        shortcuts = os_info.get('shortcuts_guide', '')
+        print(f"     Shortcuts Guide: {shortcuts[:100] if shortcuts else 'N/A'}...")
         tests.append(("get_os_info", True, None))
     except Exception as e:
         print(f"   ✗ Failed: {e}")
