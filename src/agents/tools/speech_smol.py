@@ -27,9 +27,9 @@ class SpeechSmolTool(Tool):
     """
     name = "speech"
     description = (
-        "Transcribe audio files to text or generate speech from text. "
-        "Use action='transcribe' with path to audio file, "
-        "or action='speak' with text to generate speech."
+        "Generate spoken audio from text (text-to-speech) or transcribe audio files to text (speech-to-text). "
+        "Use action='speak' to generate audio output from text. "
+        "Use action='transcribe' to convert audio files to text."
     )
     inputs = {
         "action": {
@@ -81,6 +81,8 @@ class SpeechSmolTool(Tool):
             return False
         
         try:
+            # Note: NNPACK warnings from PyTorch are harmless hardware optimization messages
+            # They indicate NNPACK isn't available but don't affect functionality
             self.tts = self.NeuTTSAir(
                 backbone_repo="neuphonic/neutts-air-q4-gguf",
                 backbone_device="cpu",

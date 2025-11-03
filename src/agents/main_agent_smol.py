@@ -41,7 +41,7 @@ TOOL USAGE:
 - webbrowser tool: Search the web, fetch URLs, or research topics
 - desktop tool: Control keyboard/mouse or take screenshots
 - vision tool: Analyze images or screenshots
-- speech tool: Transcribe audio or generate speech
+- speech tool: ALWAYS use when asked to "speak", "say out loud", "read aloud", or generate audio/voice output. Also use for transcribing audio files.
 - codeexec tool: Run Python code for complex tasks
 - discord_agent: Send Discord messages to channels or DMs (when available)
 
