@@ -36,17 +36,21 @@ def test_kde_detection():
         os_info = get_os_info()
         
         print(f"\n   OS Info:")
-        print(f"     OS Type: {os_info['os']}")
-        print(f"     Description: {os_info['description']}")
+        print(f"     OS Type: {os_info.get('os', 'Unknown')}")
+        print(f"     Description: {os_info.get('description', 'Unknown')}")
         print(f"     Desktop Environment: {os_info.get('desktop_environment', 'N/A')}")
         print(f"\n   Shortcuts Guide:")
-        print(f"     {os_info['shortcuts_guide']}")
+        print(f"     {os_info.get('shortcuts_guide', 'N/A')}")
         
         # Verify KDE-specific information
-        assert "KDE" in os_info['description'], "Description should contain 'KDE'"
-        assert "kde" in os_info.get('desktop_environment', ''), "Desktop environment should be 'kde'"
-        assert "Meta" in os_info['shortcuts_guide'] or "Super" in os_info['shortcuts_guide'], "Should mention Meta/Super key"
-        assert "meta" in os_info['shortcuts_guide'].lower() or "super" in os_info['shortcuts_guide'].lower(), "Should recommend 'meta' or 'super' key"
+        description = os_info.get('description', '')
+        shortcuts_guide = os_info.get('shortcuts_guide', '')
+        desktop_env = os_info.get('desktop_environment', '')
+        
+        assert "KDE" in description, "Description should contain 'KDE'"
+        assert "kde" in desktop_env, "Desktop environment should be 'kde'"
+        assert "Meta" in shortcuts_guide or "Super" in shortcuts_guide, "Should mention Meta/Super key"
+        assert "meta" in shortcuts_guide.lower() or "super" in shortcuts_guide.lower(), "Should recommend 'meta' or 'super' key"
         
         print("\n   ✓ KDE Plasma detection successful!")
         print("   ✓ Contains KDE-specific keyboard shortcuts")

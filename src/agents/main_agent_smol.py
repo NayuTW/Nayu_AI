@@ -124,7 +124,7 @@ class MainAgentSmol:
                 "description": desktop.description
             })
             # Capture OS context for system prompt
-            self.os_context = f"\nSYSTEM INFO: Running on {desktop.os_info['description']}. {desktop.os_info['shortcuts_guide']}"
+            self.os_context = f"\nSYSTEM INFO: Running on {desktop.os_info.get('description', 'Unknown OS')}. {desktop.os_info.get('shortcuts_guide', '')}"
         except Exception as e:
             print(f"Warning: Could not initialize desktop tool: {e}")
         

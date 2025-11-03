@@ -102,11 +102,11 @@ class DesktopSmolTool(Tool):
     # Generate OS-aware description
     _os_info = get_os_info()
     description = (
-        f"Control desktop via keyboard/mouse or take screenshots on {_os_info['description']}. "
+        f"Control desktop via keyboard/mouse or take screenshots on {_os_info.get('description', 'Unknown OS')}. "
         "Actions: 'screenshot' (saves to .cache/), 'click' (x, y coordinates), "
         "'move' (x, y coordinates), 'typewrite' (text string), "
         f"'hotkey' (keys list like ['ctrl', 'c']). "
-        f"OS Info: {_os_info['shortcuts_guide']}"
+        f"OS Info: {_os_info.get('shortcuts_guide', 'OS-specific shortcuts may vary.')}"
     )
     inputs = {
         "action": {
