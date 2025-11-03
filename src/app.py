@@ -159,11 +159,14 @@ async def main():
     print(f"Dashboard: http://<vm-ip>:8008")
     if discord_service:
         print("Discord bot: RUNNING")
+    print(f"Session: {session_id}")
     print()
     print("Commands:")
-    print("  'voice on'  - Enable voice notifications")
-    print("  'voice off' - Disable voice notifications")
-    print("  'quit'      - Exit the application")
+    print("  'voice on'       - Enable voice notifications")
+    print("  'voice off'      - Disable voice notifications")
+    print("  '/reset-session' - Clear conversation history")
+    print("  '/sessions'      - List all sessions")
+    print("  'quit'           - Exit the application")
     print("=" * 60)
     print()
     
@@ -189,6 +192,23 @@ async def main():
                 print("Voice disabled.")
                 continue
             
+            # Handle session commands
+            if user.strip().lower() == "/reset-session":
+                agent.reset_session()
+                print(f"Session {session_id} has been reset. Conversation history cleared.")
+                continue
+            
+            if user.strip().lower() == "/sessions":
+                sessions = agent.list_sessions()
+                if sessions:
+                    print(f"Available sessions ({len(sessions)}):")
+                    for s in sessions:
+                        current = " (current)" if s == session_id else ""
+                        print(f"  - {s}{current}")
+                else:
+                    print("No saved sessions found.")
+                continue
+            
             # Process user message
             resp = await agent.handle_user_message(
                 user,
@@ -211,8 +231,9 @@ async def main():
             logger.info("Shutting down Discord bot...")
             await discord_service.stop()
         
-        # Flush any pending database events
-        logger.info("Flushing pending database events...")
+        # Flush session cache and any pending database events
+        logger.info("Flushing session cache and pending database events...")
+        agent.session_manager.flush_cache()
         store.flush()
         store.close()
 

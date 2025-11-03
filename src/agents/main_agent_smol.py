@@ -5,7 +5,7 @@ This replaces the custom LLM-based orchestrator with smolagents' built-in CodeAg
 import asyncio
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from smolagents import CodeAgent
 
@@ -23,6 +23,7 @@ from src.agents.tools.vision_smol import VisionSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
 from src.agents.tools.codeagent import CodeAgentTool
+from src.agents.memory.session_manager import SessionManager
 
 
 # System prompt for the main agent
@@ -84,6 +85,14 @@ class MainAgentSmol:
         self.store = store
         self.session_id = session_id
         self.os_context = ""  # Will be populated when desktop tool is initialized
+        
+        # Initialize session manager
+        self.session_manager = SessionManager(
+            session_dir=".nayu_ai/sessions",
+            max_messages=20,
+            max_tokens=4096,
+            summary_interval=5
+        )
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
@@ -230,11 +239,18 @@ class MainAgentSmol:
         external_metadata: Optional[Dict[str, Any]] = None,
         user_id: Optional[str] = None,
         channel_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> str:
         """
-        Handle a user message using the CodeAgent.
+        Handle a user message using the CodeAgent with session context.
         """
-        # Get memory context
+        # Use provided session_id or fall back to default
+        active_session_id = session_id or self.session_id
+        
+        # Get session context (summary, working set, recent messages)
+        summary, working_set_context, recent_messages = self.session_manager.get_context(active_session_id)
+        
+        # Get memory context from memory tool
         try:
             mem_tool = next((t for t in self.tools if t.name == "memory"), None)
             if mem_tool:
@@ -247,12 +263,30 @@ class MainAgentSmol:
         # Build context
         context = self.state.build_context(mem_digest)
         
-        # Build prompt with context
+        # Build conversation history for context
+        conversation_history = ""
+        if recent_messages:
+            history_lines = []
+            for msg in recent_messages[-10:]:  # Last 10 messages for context
+                role_label = "User" if msg.role == "user" else "Assistant"
+                history_lines.append(f"{role_label}: {msg.content}")
+            conversation_history = "\n".join(history_lines)
+        
+        # Build prompt with full context including session memory
         full_prompt = f"""{SYSTEM_PROMPT}
 {self.os_context}
 
 CONTEXT:
 {context}
+
+SESSION SUMMARY:
+{summary if summary else "No previous conversation summary."}
+
+WORKING SET:
+{working_set_context if working_set_context else "No active artifacts or tasks."}
+
+RECENT CONVERSATION:
+{conversation_history if conversation_history else "This is the start of the conversation."}
 
 MESSAGE SOURCE: {source}
 {f"USER_ID: {user_id}" if user_id else ""}
@@ -261,13 +295,22 @@ MESSAGE SOURCE: {source}
 USER MESSAGE:
 {user_text}
 
-Respond naturally and use tools only if needed."""
+Respond naturally and use tools only if needed. You can reference previous messages and artifacts from the conversation."""
+        
+        # Add user message to session
+        self.session_manager.add_message(
+            session_id=active_session_id,
+            role="user",
+            content=user_text,
+            metadata={"source": source, "user_id": user_id, "channel_id": channel_id}
+        )
         
         # Publish input event
         await self.bus.publish("agent.input", {
             "text": user_text,
             "source": source,
-            "meta": external_metadata or {}
+            "meta": external_metadata or {},
+            "session_id": active_session_id
         })
         
         try:
@@ -280,11 +323,23 @@ Respond naturally and use tools only if needed."""
             if not result or not result.strip():
                 result = "I processed your request."
             
-            # Persist the interaction
+            # Add assistant response to session
+            self.session_manager.add_message(
+                session_id=active_session_id,
+                role="assistant",
+                content=result,
+                metadata={"latency_ms": latency_ms}
+            )
+            
+            # Persist the interaction for fine-tuning
             await self._persist_example(user_text, result, mem_digest, source, user_id, channel_id)
             
             # Publish output event
-            await self.bus.publish("agent.output", {"text": result, "latency_ms": latency_ms})
+            await self.bus.publish("agent.output", {
+                "text": result,
+                "latency_ms": latency_ms,
+                "session_id": active_session_id
+            })
             
             return result
             
@@ -358,3 +413,41 @@ Respond naturally and use tools only if needed."""
                 "error": str(e),
             })
             return "Sorry, I encountered an error processing your message."
+    
+    def reset_session(self, session_id: Optional[str] = None):
+        """
+        Reset a session, clearing all history.
+        
+        Args:
+            session_id: Session to reset. If None, resets the default session.
+        """
+        target_session = session_id or self.session_id
+        self.session_manager.reset_session(target_session)
+    
+    def list_sessions(self) -> List[str]:
+        """List all available sessions."""
+        return self.session_manager.list_sessions()
+    
+    def update_working_set(
+        self,
+        session_id: Optional[str] = None,
+        task_info: Optional[Dict[str, Any]] = None,
+        artifacts: Optional[Dict[str, Any]] = None,
+        env_context: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Update the working set for a session.
+        
+        Args:
+            session_id: Session to update. If None, uses default session.
+            task_info: Task information (id, type, outcome)
+            artifacts: Artifact updates (e.g., last_file, last_url)
+            env_context: Environment context updates
+        """
+        target_session = session_id or self.session_id
+        self.session_manager.update_working_set(
+            session_id=target_session,
+            task_info=task_info,
+            artifacts=artifacts,
+            env_context=env_context
+        )
