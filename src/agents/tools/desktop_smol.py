@@ -23,9 +23,9 @@ class DesktopSmolTool(Tool):
     name = "desktop"
     description = (
         "Control desktop via keyboard/mouse or take screenshots. "
-        "Actions: 'screenshot' (saves to .cache/), 'click' (x, y coordinates), "
-        "'move' (x, y coordinates), 'typewrite' (text string), "
-        "'hotkey' (keys list like ['ctrl', 'c'])"
+        "Actions: 'screenshot' (returns the file path to the saved screenshot in .cache/), "
+        "'click' (x, y coordinates), 'move' (x, y coordinates), "
+        "'typewrite' (text string), 'hotkey' (keys list like ['ctrl', 'c'])"
     )
     inputs = {
         "action": {
@@ -86,7 +86,8 @@ class DesktopSmolTool(Tool):
         """Execute desktop action and return result description."""
         if action == "screenshot":
             path = self.screenshot()
-            return f"Screenshot saved to: {path}"
+            # Return just the path so it can be easily used by other tools like vision
+            return path
         
         elif action == "move":
             if x is None or y is None:
