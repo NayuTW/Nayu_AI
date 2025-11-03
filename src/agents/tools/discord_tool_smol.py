@@ -1,149 +1,117 @@
 """
-Discord tool for smolagents - sends messages to Discord channels or DMs.
-This is a simple Tool that wraps the Discord service functionality.
+Discord tool converted to smolagents Tool class.
+Handles sending messages to Discord channels and DMs.
 """
-from typing import Any, Optional
+from typing import Optional, Any
 from smolagents import Tool
 
 
 class DiscordSmolTool(Tool):
     """
-    Discord messaging tool for sending DMs and channel messages.
-    Provides simple interface to Discord service functionality.
+    Send messages to Discord channels or direct messages.
+    Requires an active Discord bot service.
     """
     name = "discord"
     description = (
-        "Send messages to Discord channels or direct messages. "
-        "Use 'dm' action to send a direct message to a user, "
-        "or 'channel' action to send a message to a channel. "
-        "Specify target user/channel by name (e.g., '@username' or '#channel-name') or ID."
+        "Send messages to Discord (DMs or channels). "
+        "You can specify numeric IDs or human-friendly targets like '#general' or '@username'. "
+        "Use action='send_channel' for channel messages or action='send_dm' for direct messages."
     )
-    
-    # Timeout for Discord operations (seconds)
-    TIMEOUT = 10.0
-    
     inputs = {
         "action": {
             "type": "string",
-            "enum": ["dm", "channel"],
-            "description": "Action: 'dm' for direct message or 'channel' for channel message"
+            "description": "Action: 'send_channel' for channels or 'send_dm' for DMs"
+        },
+        "text": {
+            "type": "string",
+            "description": "Message text to send"
+        },
+        "channel_id": {
+            "type": "string",
+            "description": "Discord channel ID (for send_channel)",
+            "nullable": True
+        },
+        "user_id": {
+            "type": "string",
+            "description": "Discord user ID (for send_dm)",
+            "nullable": True
         },
         "target": {
             "type": "string",
-            "description": "Target user (for dm) or channel (for channel). Can be name like '@user' or '#channel', or numeric ID"
-        },
-        "message": {
-            "type": "string",
-            "description": "The message text to send"
+            "description": "Human-friendly target like '#general' or '@alice'",
+            "nullable": True
         },
         "guild_id": {
-            "type": "string",
-            "description": "Optional guild ID for resolving user/channel names",
+            "type": "integer",
+            "description": "Guild ID for name resolution (optional)",
             "nullable": True
         }
     }
     output_type = "string"
     
     def __init__(self, discord_service: Any):
-        """
-        Initialize the Discord tool.
-        
-        Args:
-            discord_service: The Discord bot service instance (DiscordBotService)
-        """
         super().__init__()
-        self.discord_service = discord_service
+        self.discord = discord_service
     
     def forward(
         self,
         action: str,
-        target: str,
-        message: str,
-        guild_id: Optional[str] = None
+        text: str,
+        channel_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        target: Optional[str] = None,
+        guild_id: Optional[int] = None
     ) -> str:
-        """
-        Send a Discord message.
-        
-        Args:
-            action: 'dm' or 'channel'
-            target: User or channel identifier
-            message: Message content
-            guild_id: Optional guild ID for name resolution
-            
-        Returns:
-            Success/failure message
-        """
+        """Execute Discord action and return result."""
         import asyncio
-        import concurrent.futures
+        
+        text = (text or "").strip()
+        if not text:
+            return "Error: No text provided for Discord message"
         
         try:
-            # Convert guild_id to int if provided
-            guild_id_int = int(guild_id) if guild_id else None
+            # Define the async operation
+            async def send_discord_message():
+                if action == "send_channel":
+                    if channel_id:
+                        await self.discord.send_channel_message(int(channel_id), text)
+                        return f"Sent message to channel {channel_id}"
+                    elif target:
+                        await self.discord.send_channel_target(target, text, guild_id=guild_id)
+                        return f"Sent message to {target}"
+                    else:
+                        return "Error: Provide 'channel_id' or 'target' for send_channel action"
+                
+                elif action == "send_dm":
+                    if user_id:
+                        await self.discord.send_dm(int(user_id), text)
+                        return f"Sent DM to user {user_id}"
+                    elif target:
+                        await self.discord.send_dm_target(target, text, guild_id=guild_id)
+                        return f"Sent DM to {target}"
+                    else:
+                        return "Error: Provide 'user_id' or 'target' for send_dm action"
+                
+                else:
+                    return f"Error: Unknown action '{action}'. Use 'send_channel' or 'send_dm'"
             
-            # Build the coroutine based on action
-            if action == "dm":
-                coro = self.discord_service.send_dm_target(
-                    target=target,
-                    content=message,
-                    guild_id=guild_id_int
-                )
-                action_desc = "DM"
-            elif action == "channel":
-                coro = self.discord_service.send_channel_target(
-                    target=target,
-                    content=message,
-                    guild_id=guild_id_int
-                )
-                action_desc = "Channel message"
-            else:
-                return f"Error: Unknown action '{action}'. Use 'dm' or 'channel'"
-            
-            # Execute the coroutine
-            # The Discord bot runs in its own event loop. We need to schedule the
-            # coroutine in that loop from the agent's thread.
-            bot = self.discord_service.bot
-            if bot and hasattr(bot, 'loop') and bot.loop and bot.loop.is_running():
-                # Schedule in the bot's event loop from this thread and wait for completion
-                future = asyncio.run_coroutine_threadsafe(coro, bot.loop)
-                try:
-                    # Wait for completion with a reasonable timeout
-                    future.result(timeout=self.TIMEOUT)
-                    result = f"{action_desc} sent to {target}"
-                except concurrent.futures.TimeoutError:
-                    # Timeout - operation may still complete in background
-                    result = f"{action_desc} initiated to {target} (operation timed out, may still complete)"
-                except Exception as e:
-                    result = f"Error sending {action_desc}: {str(e)}"
-            else:
-                # Bot loop not available - likely in testing or standalone mode
-                # Try to run synchronously
-                try:
-                    loop = asyncio.get_running_loop()
-                    # Already in an event loop (but not the bot's)
-                    result = f"Error: Bot event loop not available for {action_desc}"
-                except RuntimeError:
-                    # No running loop - create temporary one (testing scenario)
-                    # Save current loop if any
-                    old_loop = None
-                    try:
-                        old_loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        pass
-                    
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        loop.run_until_complete(coro)
-                        result = f"{action_desc} sent to {target}"
-                    finally:
-                        loop.close()
-                        # Restore previous loop if there was one
-                        if old_loop is not None:
-                            asyncio.set_event_loop(old_loop)
-            
-            return result
-            
-        except ValueError as e:
-            return f"Error: Could not resolve target '{target}': {str(e)}"
+            # Try to get the running event loop (Discord bot's loop)
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an async context, create a task and schedule it
+                # Use asyncio.create_task to schedule the coroutine
+                future = asyncio.ensure_future(send_discord_message(), loop=loop)
+                # Return immediately without waiting (fire and forget)
+                return "Discord message scheduled for delivery"
+            except RuntimeError:
+                # No running loop, try to use the Discord bot's loop
+                if hasattr(self.discord, 'bot') and hasattr(self.discord.bot, 'loop'):
+                    loop = self.discord.bot.loop
+                    # Schedule the coroutine on the bot's event loop
+                    asyncio.run_coroutine_threadsafe(send_discord_message(), loop)
+                    return "Discord message scheduled for delivery"
+                else:
+                    return "Error: No event loop available for Discord operations"
+        
         except Exception as e:
             return f"Error sending Discord message: {str(e)}"

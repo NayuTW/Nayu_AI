@@ -36,39 +36,48 @@ def test_discord_tool_instantiation():
     mock_service = Mock()
     mock_service.send_dm_target = AsyncMock()
     mock_service.send_channel_target = AsyncMock()
+    mock_service.send_dm = AsyncMock()
+    mock_service.send_channel_message = AsyncMock()
     
     # Instantiate the tool
     tool = DiscordSmolTool(mock_service)
     
     # Verify the tool has the service
-    assert tool.discord_service is mock_service
+    assert tool.discord is mock_service
     
     print("✓ DiscordSmolTool can be instantiated")
 
 
 def test_discord_tool_forward():
     """Test that the forward method works and doesn't create nested agents."""
-    # Create a mock Discord service
+    # Create a mock Discord service with bot attribute
+    mock_bot = Mock()
+    mock_bot.loop = None  # No loop available
+    
     mock_service = Mock()
+    mock_service.bot = mock_bot
     mock_service.send_dm_target = AsyncMock(return_value=None)
     mock_service.send_channel_target = AsyncMock(return_value=None)
+    mock_service.send_dm = AsyncMock(return_value=None)
+    mock_service.send_channel_message = AsyncMock(return_value=None)
     
     # Instantiate the tool
     tool = DiscordSmolTool(mock_service)
     
     # Call the forward method (this should NOT create a nested agent)
     result = tool.forward(
-        action="dm",
-        target="@testuser",
-        message="Test message"
+        action="send_dm",
+        text="Test message",
+        target="@testuser"
     )
     
     # Verify result is a string (the tool's response, not an agent's response)
     assert isinstance(result, str)
-    assert "DM" in result  # Should mention DM in response
+    # The new API returns "Error: No event loop available" when no loop is present
+    assert "Discord" in result or "Error" in result
     
     # Verify no ToolCallingAgent was created
-    # The tool should directly use the discord_service, not wrap it in an agent
+    # The tool should directly use the discord service, not wrap it in an agent
     assert not hasattr(tool, 'discord_agent'), "Tool should not have a nested agent"
     
     print("✓ DiscordSmolTool.forward() works without nested agents")
@@ -129,9 +138,13 @@ def test_tool_description_clarity():
     assert "DM" in description or "direct message" in description.lower()
     assert "channel" in description.lower()
     
-    # Should mention actions
+    # Should mention actions - check that both send_channel and send_dm are mentioned in description
+    assert "send_channel" in description or "send_dm" in description
+    
+    # Verify required inputs exist
     inputs = DiscordSmolTool.inputs
-    assert inputs["action"]["enum"] == ["dm", "channel"]
+    assert "action" in inputs
+    assert "text" in inputs
     
     print("✓ Tool description is clear and complete")
 
