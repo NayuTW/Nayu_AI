@@ -129,7 +129,7 @@ Dashboard accessible at:
 ### Environment Variables
 - `AGENT_DASH_HOST`: Dashboard bind address (default: 0.0.0.0)
 - `AGENT_DASH_PORT`: Dashboard port (default: 8008)
-- `TTS_REF_AUDIO`: Path to reference audio for voice cloning
+- `TTS_REF_AUDIO`: Path to reference audio for voice cloning - supports `.pt` (pre-encoded, recommended) or `.wav` files
 - `TTS_REF_TEXT`: Reference text or path to transcript file
 
 ### Ollama Models

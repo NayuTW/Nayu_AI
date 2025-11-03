@@ -158,8 +158,8 @@ export AGENT_MODEL=my-custom-model
 export AGENT_DASH_HOST=0.0.0.0
 export AGENT_DASH_PORT=8008
 
-# Optional TTS settings
-export TTS_REF_AUDIO=/path/to/reference.wav
+# Optional TTS settings (use .pt for best performance)
+export TTS_REF_AUDIO=/path/to/reference.pt  # or reference.wav
 export TTS_REF_TEXT="The transcript of the reference audio"
 ```
 

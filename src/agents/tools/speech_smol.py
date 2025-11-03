@@ -15,6 +15,7 @@ except ImportError:
 try:
     from neuttsair.neutts import NeuTTSAir
     import soundfile as sf
+    import torch
     TTS_AVAILABLE = True
 except ImportError:
     TTS_AVAILABLE = False
@@ -72,6 +73,7 @@ class SpeechSmolTool(Tool):
         if TTS_AVAILABLE:
             self.NeuTTSAir = NeuTTSAir
             self.sf = sf
+            self.torch = torch
     
     def _init_tts(self):
         """Lazy initialize TTS model."""
@@ -86,9 +88,16 @@ class SpeechSmolTool(Tool):
                 codec_device="cpu"
             )
             
-            # Pre-encode reference if available
+            # Load or encode reference if available
             if self.ref_audio_path and os.path.exists(self.ref_audio_path):
-                self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
+                # Check if reference is a pre-encoded .pt file
+                if self.ref_audio_path.endswith('.pt'):
+                    # Load pre-encoded reference codes directly
+                    self.ref_codes = self.torch.load(self.ref_audio_path)
+                else:
+                    # Fallback: encode raw audio file (backward compatibility)
+                    self.ref_codes = self.tts.encode_reference(self.ref_audio_path)
+                
                 # Load reference text if it's a file path
                 if self.ref_text and os.path.exists(self.ref_text):
                     with open(self.ref_text, "r") as f:

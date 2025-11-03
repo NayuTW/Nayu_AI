@@ -87,13 +87,37 @@ NeuTTS-Air requires reference audio to clone a voice. Follow these guidelines:
 My name is Dave, and um, I'm from London.
 ```
 
-### Setting Environment Variables
+### Pre-encoding Reference Audio (Recommended)
 
-Configure the reference audio by setting environment variables before starting the application:
+For optimal performance, you can pre-encode your reference audio to a `.pt` file. This avoids re-encoding on every TTS initialization.
+
+**Option 1: Use Pre-encoded .pt Files (Recommended)**
+
+1. Pre-encode your reference audio using NeuTTS-Air:
+
+```python
+from neuttsair.neutts import NeuTTSAir
+import torch
+
+# Initialize NeuTTS-Air
+tts = NeuTTSAir(
+    backbone_repo="neuphonic/neutts-air-q4-gguf",
+    backbone_device="cpu",
+    codec_repo="neuphonic/neucodec-onnx-decoder",
+    codec_device="cpu"
+)
+
+# Encode and save reference
+ref_codes = tts.encode_reference("/path/to/reference.wav")
+torch.save(ref_codes, "/path/to/reference.pt")
+print("Reference codes saved to reference.pt")
+```
+
+2. Set environment variables to use the pre-encoded file:
 
 **Linux/macOS:**
 ```bash
-export TTS_REF_AUDIO=/path/to/reference.wav
+export TTS_REF_AUDIO=/path/to/reference.pt
 export TTS_REF_TEXT=/path/to/reference.txt
 # Or provide the text directly:
 export TTS_REF_TEXT="My name is Dave, and um, I'm from London."
@@ -101,11 +125,29 @@ export TTS_REF_TEXT="My name is Dave, and um, I'm from London."
 
 **Windows:**
 ```powershell
-$env:TTS_REF_AUDIO="C:\path\to\reference.wav"
+$env:TTS_REF_AUDIO="C:\path\to\reference.pt"
 $env:TTS_REF_TEXT="C:\path\to\reference.txt"
 # Or:
 $env:TTS_REF_TEXT="My name is Dave, and um, I'm from London."
 ```
+
+**Option 2: Use Raw Audio Files (Backward Compatible)**
+
+If you don't pre-encode, the system will automatically encode raw audio files on first use:
+
+**Linux/macOS:**
+```bash
+export TTS_REF_AUDIO=/path/to/reference.wav
+export TTS_REF_TEXT=/path/to/reference.txt
+```
+
+**Windows:**
+```powershell
+$env:TTS_REF_AUDIO="C:\path\to\reference.wav"
+$env:TTS_REF_TEXT="C:\path\to\reference.txt"
+```
+
+**Note:** Using pre-encoded `.pt` files significantly reduces TTS initialization time and is the recommended approach.
 
 ## Sample Reference Files
 
@@ -198,7 +240,7 @@ By default, the system runs on CPU. To use GPU acceleration:
 
 ## Performance Tips
 
-1. **Pre-encode references**: The system automatically pre-encodes reference audio on first use for faster subsequent inference
+1. **Use pre-encoded .pt files**: Always use pre-encoded `.pt` files for reference audio instead of raw `.wav` files. This eliminates encoding overhead during TTS initialization and significantly improves startup time.
 2. **Use GGUF models**: For on-device deployment, consider using quantized GGUF models
 3. **Adjust model size**: Smaller models are faster but may have lower quality
 

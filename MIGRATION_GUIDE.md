@@ -145,7 +145,7 @@ Same as before:
 - `AGENT_DASH_HOST`: Dashboard host (default: `0.0.0.0`)
 - `AGENT_DASH_PORT`: Dashboard port (default: `8008`)
 - `DISCORD_BOT_TOKEN`: Discord bot token (optional)
-- `TTS_REF_AUDIO`: Reference audio for voice cloning (optional)
+- `TTS_REF_AUDIO`: Reference audio for voice cloning - supports `.pt` (pre-encoded, recommended) or `.wav` files (optional)
 - `TTS_REF_TEXT`: Reference text for voice cloning (optional)
 
 ### Model Configuration

@@ -49,8 +49,14 @@ NeuTTS-Air provides state-of-the-art voice cloning. To use TTS features:
 
 2. **Configure via environment variables**:
    ```bash
+   # Option 1: Use pre-encoded .pt file (recommended for best performance)
+   export TTS_REF_AUDIO=/path/to/reference.pt
+   export TTS_REF_TEXT=/path/to/transcript.txt
+   
+   # Option 2: Use raw audio file (will be encoded on first use)
    export TTS_REF_AUDIO=/path/to/reference.wav
    export TTS_REF_TEXT=/path/to/transcript.txt
+   
    # Or provide text directly:
    export TTS_REF_TEXT="The exact transcript of the reference audio"
    ```
@@ -180,7 +186,7 @@ The agent can integrate with Discord to read and respond to messages in guilds (
 - AGENT_MODEL: Ollama model name for the main LLM (default: llama3.1:8b-instruct-q4_K_M)
 - AGENT_DASH_HOST: default 0.0.0.0 (bind address)
 - AGENT_DASH_PORT: default 8008
-- TTS_REF_AUDIO: path to reference audio file for NeuTTS-Air voice cloning (optional)
+- TTS_REF_AUDIO: path to reference audio file for NeuTTS-Air voice cloning - supports `.pt` (pre-encoded, recommended) or `.wav` files (optional)
 - TTS_REF_TEXT: text content or path to text file for the reference audio (optional)
 - DISCORD_BOT_TOKEN: Discord bot token to enable Discord integration (optional)
 - DISCORD_RESPOND_MODE: Bot response mode - passive/mention/prefix/all (default: mention)
