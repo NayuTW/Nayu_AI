@@ -113,6 +113,46 @@ class SpeechSmolTool(Tool):
         except Exception as e:
             return False
     
+    def _play_audio(self, audio_path: str) -> bool:
+        """
+        Play audio file using available system tools.
+        Returns True if playback succeeded, False otherwise.
+        """
+        import subprocess
+        import platform
+        
+        try:
+            system = platform.system()
+            
+            # Try platform-specific players
+            if system == "Linux":
+                # Try common Linux audio players in order of preference
+                players = [
+                    ["aplay", audio_path],
+                    ["paplay", audio_path],
+                    ["ffplay", "-nodisp", "-autoexit", audio_path],
+                ]
+                for cmd in players:
+                    try:
+                        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+                        return True
+                    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                        continue
+            
+            elif system == "Darwin":  # macOS
+                subprocess.run(["afplay", audio_path], check=True, timeout=30)
+                return True
+            
+            elif system == "Windows":
+                # Use Windows Media Player command line
+                subprocess.run(["powershell", "-c", f"(New-Object Media.SoundPlayer '{audio_path}').PlaySync()"], 
+                             check=True, timeout=30)
+                return True
+            
+            return False
+        except Exception:
+            return False
+    
     def forward(
         self,
         action: str,
@@ -160,7 +200,20 @@ class SpeechSmolTool(Tool):
                     # Generate speech with voice cloning
                     wav = self.tts.infer(text, self.ref_codes, self.ref_text)
                     self.sf.write(out_path, wav, 24000)
-                    return f"Spoken via NeuTTS-Air, saved to: {out_path}"
+                    
+                    # Play the audio
+                    play_success = self._play_audio(out_path)
+                    
+                    # Clean up the audio file after playing
+                    try:
+                        os.remove(out_path)
+                    except Exception:
+                        pass  # Ignore cleanup errors
+                    
+                    if play_success:
+                        return f"Spoken via NeuTTS-Air: {text[:100]}{'...' if len(text) > 100 else ''}"
+                    else:
+                        return f"Generated speech (playback unavailable): {text[:100]}{'...' if len(text) > 100 else ''}"
                 else:
                     return (
                         "NeuTTS-Air requires reference audio and text for voice cloning. "
