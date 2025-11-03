@@ -44,6 +44,7 @@ TOOL USAGE:
 - speech tool: Transcribe audio or generate speech
 - codeexec tool: Run Python code for complex tasks
 - discord tool: Send messages to Discord channels or DMs (when available)
+  - Important: Remember to specify the user or channel target to the discord tool
 - When using vision on a screenshot: first call desktop(action='screenshot') to get the path, then call vision(path=<that_path>)
 
 RESPONSE STYLE:
@@ -75,6 +76,7 @@ class MainAgentSmol:
         self.notifier = notifier
         self.store = store
         self.session_id = session_id
+        self.os_context = ""  # Will be populated when desktop tool is initialized
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
@@ -122,6 +124,8 @@ class MainAgentSmol:
                 "name": desktop.name,
                 "description": desktop.description
             })
+            # Capture OS context for system prompt
+            self.os_context = f"\nSYSTEM INFO: Running on {desktop.os_info.get('description', 'Unknown OS')}. {desktop.os_info.get('shortcuts_guide', '')}"
         except Exception as e:
             print(f"Warning: Could not initialize desktop tool: {e}")
         
@@ -228,6 +232,7 @@ class MainAgentSmol:
         
         # Build prompt with context
         full_prompt = f"""{SYSTEM_PROMPT}
+{self.os_context}
 
 CONTEXT:
 {context}

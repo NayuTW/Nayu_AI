@@ -1,6 +1,14 @@
 """
-Discord Agent Tool - A wrapper that uses ToolCallingAgent internally.
-This tool provides a simple interface for sending Discord messages using a ToolCallingAgent.
+DEPRECATED: Discord Agent Tool - A wrapper that uses ToolCallingAgent internally.
+
+This implementation is deprecated due to causing duplicate tool calls and multiple final_answer issues.
+The nested ToolCallingAgent architecture causes the inner agent to generate a final_answer,
+which then becomes observations for the outer CodeAgent, causing it to generate another final_answer.
+
+Use DiscordSmolTool instead (discord_tool_smol.py), which provides direct tool access without
+the nested agent architecture.
+
+This file is kept for reference only and should not be used in production.
 """
 from typing import Optional, Any
 from smolagents import Tool, ToolCallingAgent
@@ -29,10 +37,19 @@ class DiscordAgentTool(Tool):
         """
         Initialize the Discord agent tool.
         
+        DEPRECATED: Use DiscordSmolTool instead to avoid duplicate tool calls.
+        
         Args:
             discord_service: The Discord bot service instance
             model: The LLM model to use for the ToolCallingAgent
         """
+        import warnings
+        warnings.warn(
+            "DiscordAgentTool is deprecated and causes duplicate tool calls. "
+            "Use DiscordSmolTool from discord_tool_smol.py instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         super().__init__()
         
         from src.agents.tools.discord_tool_smol import DiscordSmolTool
