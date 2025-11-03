@@ -70,57 +70,58 @@ class DiscordSmolTool(Tool):
             Success/failure message
         """
         import asyncio
+        import concurrent.futures
         
         try:
             # Convert guild_id to int if provided
             guild_id_int = int(guild_id) if guild_id else None
             
-            # Get the event loop
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # Execute the send operation
+            # Build the coroutine based on action
             if action == "dm":
-                # Send DM
                 coro = self.discord_service.send_dm_target(
                     target=target,
                     content=message,
                     guild_id=guild_id_int
                 )
-                
-                if loop.is_running():
-                    # If loop is already running, create a task
-                    future = asyncio.ensure_future(coro)
-                    # Wait a bit for it to complete (non-blocking)
-                    result = f"DM queued to {target}: {message[:50]}..."
-                else:
-                    # If loop is not running, run it
-                    loop.run_until_complete(coro)
-                    result = f"DM sent to {target}: {message[:50]}..."
-                    
+                action_desc = "DM"
             elif action == "channel":
-                # Send to channel
                 coro = self.discord_service.send_channel_target(
                     target=target,
                     content=message,
                     guild_id=guild_id_int
                 )
-                
-                if loop.is_running():
-                    # If loop is already running, create a task
-                    future = asyncio.ensure_future(coro)
-                    # Wait a bit for it to complete (non-blocking)
-                    result = f"Channel message queued to {target}: {message[:50]}..."
-                else:
-                    # If loop is not running, run it
-                    loop.run_until_complete(coro)
-                    result = f"Channel message sent to {target}: {message[:50]}..."
-                    
+                action_desc = "Channel message"
             else:
-                result = f"Error: Unknown action '{action}'. Use 'dm' or 'channel'"
+                return f"Error: Unknown action '{action}'. Use 'dm' or 'channel'"
+            
+            # Execute the coroutine
+            # Check if the Discord bot has a running event loop
+            bot = self.discord_service.bot
+            if bot and hasattr(bot, 'loop') and bot.loop and bot.loop.is_running():
+                # Schedule in the bot's event loop from this thread
+                future = asyncio.run_coroutine_threadsafe(coro, bot.loop)
+                # Wait for completion with timeout to avoid hanging
+                try:
+                    future.result(timeout=10.0)
+                    result = f"{action_desc} sent to {target}: {message[:50]}..."
+                except concurrent.futures.TimeoutError:
+                    result = f"{action_desc} scheduled to {target} (async): {message[:50]}..."
+            else:
+                # No bot loop, try to run in current context
+                try:
+                    loop = asyncio.get_running_loop()
+                    # We're in an async context but not the bot's loop
+                    # This shouldn't happen in normal operation
+                    result = f"Error: Cannot send {action_desc} - bot loop not available"
+                except RuntimeError:
+                    # No running loop, create one (testing/standalone context)
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(coro)
+                        result = f"{action_desc} sent to {target}: {message[:50]}..."
+                    finally:
+                        loop.close()
             
             return result
             
