@@ -38,7 +38,7 @@ class VisionSmolTool(Tool):
     }
     output_type = "string"
     
-    def __init__(self, model_id: str = "gemma3:4b-it-q4_K_M", ollama_url: str = "http://localhost:11434"):
+    def __init__(self, model_id: str = "gemma3:4b-it-q4_K_M", ollama_url: str = "http://localhost:11434", timeout: int = 120):
         super().__init__()
         if not VISION_AVAILABLE:
             raise ImportError(
@@ -48,6 +48,7 @@ class VisionSmolTool(Tool):
         self.model_id = model_id
         self.ollama_url = ollama_url
         self.generate_url = f"{ollama_url}/api/generate"
+        self.timeout = timeout
     
     def _encode_image(self, image_path: str) -> str:
         """Encode image to base64 string."""
@@ -73,7 +74,7 @@ class VisionSmolTool(Tool):
         
         # Make request to Ollama
         async with aiohttp.ClientSession() as session:
-            async with session.post(self.generate_url, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+            async with session.post(self.generate_url, json=payload, timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
                     raise RuntimeError(f"Ollama API error (status {resp.status}): {error_text}")
@@ -107,12 +108,15 @@ class VisionSmolTool(Tool):
             # Run async analysis in sync context
             import asyncio
             try:
-                loop = asyncio.get_event_loop()
+                # Check if we're in an existing event loop
+                asyncio.get_running_loop()
+                # If we get here, we're in a running loop - not supported yet
+                return "Error: Vision tool cannot be called from within an async context. Please call from sync context."
             except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                # No running loop, safe to use asyncio.run()
+                pass
             
-            result = loop.run_until_complete(self._analyze_image_async(path, prompt))
+            result = asyncio.run(self._analyze_image_async(path, prompt))
             return result
         
         except Exception as e:

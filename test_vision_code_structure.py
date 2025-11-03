@@ -92,7 +92,7 @@ def test_base64_import():
 
 def test_ollama_url_parameter():
     """Test that ollama_url parameter exists in __init__."""
-    print("\n6. Testing ollama_url parameter...")
+    print("\n6. Testing ollama_url and timeout parameters...")
     vision_file = "src/agents/tools/vision_smol.py"
     with open(vision_file, 'r') as f:
         content = f.read()
@@ -101,7 +101,15 @@ def test_ollama_url_parameter():
         print("   ✗ ollama_url parameter not found or incorrect")
         return False
     
-    print("   ✓ ollama_url parameter present")
+    if 'timeout: int = 120' not in content:
+        print("   ✗ timeout parameter not found or incorrect")
+        return False
+    
+    if 'self.timeout' not in content:
+        print("   ✗ self.timeout not stored")
+        return False
+    
+    print("   ✓ ollama_url and timeout parameters present")
     return True
 
 
