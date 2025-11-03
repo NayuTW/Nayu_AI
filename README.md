@@ -82,7 +82,7 @@ virsh net-dhcp-leases default
   - qwen2:7b-instruct-q5_K_M (good tool calling), or llama3.1:8b-instruct-q4_K_M
   - Set num_ctx ~8–12k for 12GB VRAM comfort
 - Vision:
-  - Qwen/Qwen2-VL-2B-Instruct (transformers, 4‑bit), or LLaVA 7B via llava.cpp
+  - gemma3:4b-it-q4_K_M via Ollama (default), or other Ollama vision models
 - Embeddings (CPU‑friendly):
   - intfloat/e5-small-v2 or BAAI/bge-small-en-v1.5 or all-MiniLM-L6-v2
 - Speech:

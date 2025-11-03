@@ -1,15 +1,15 @@
 """
 VisionTool converted to smolagents Tool class.
-Uses a Vision Language Model to analyze images.
+Uses Ollama Vision Language Model to analyze images.
 """
 import os
+import base64
 from typing import Optional
 from smolagents import Tool
 
 try:
-    import torch
+    import aiohttp
     from PIL import Image
-    from transformers import AutoProcessor, AutoModelForImageTextToText
     VISION_AVAILABLE = True
 except ImportError:
     VISION_AVAILABLE = False
@@ -38,40 +38,53 @@ class VisionSmolTool(Tool):
     }
     output_type = "string"
     
-    def __init__(self, model_id: str = "Qwen/Qwen2-VL-2B-Instruct"):
+    def __init__(self, model_id: str = "gemma3:4b-it-q4_K_M", ollama_url: str = "http://localhost:11434"):
         super().__init__()
         if not VISION_AVAILABLE:
             raise ImportError(
-                "Vision tools not available. Install with: pip install torch transformers Pillow"
+                "Vision tools not available. Install with: pip install aiohttp Pillow"
             )
         
         self.model_id = model_id
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.processor = None
-        self.model = None
+        self.ollama_url = ollama_url
+        self.generate_url = f"{ollama_url}/api/generate"
     
-    def _get_model_config(self):
-        """Get device-specific model configuration."""
-        is_cuda = self.device == "cuda"
-        return {
-            "dtype": torch.float16 if is_cuda else torch.float32,
-            "load_in_4bit": is_cuda,
-            "device_map": "auto",
-            "trust_remote_code": True
-        }
+    def _encode_image(self, image_path: str) -> str:
+        """Encode image to base64 string."""
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode("utf-8")
     
     def setup(self):
-        """Lazy load the model on first use."""
-        if self.model is None:
-            try:
-                self.processor = AutoProcessor.from_pretrained(self.model_id, trust_remote_code=True)
-                self.model = AutoModelForImageTextToText.from_pretrained(
-                    self.model_id,
-                    **self._get_model_config()
-                )
-            except Exception as e:
-                raise RuntimeError(f"Failed to load vision model: {e}")
+        """Setup method for smolagents Tool compatibility."""
         super().setup()
+    
+    async def _analyze_image_async(self, path: str, prompt: str) -> str:
+        """Async helper to analyze image with Ollama."""
+        # Encode image to base64
+        image_b64 = self._encode_image(path)
+        
+        # Prepare request payload
+        payload = {
+            "model": self.model_id,
+            "prompt": prompt,
+            "images": [image_b64],
+            "stream": False
+        }
+        
+        # Make request to Ollama
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self.generate_url, json=payload, timeout=aiohttp.ClientTimeout(total=120)) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    raise RuntimeError(f"Ollama API error (status {resp.status}): {error_text}")
+                
+                data = await resp.json()
+                response_text = data.get("response", "")
+                
+                if not response_text:
+                    raise RuntimeError("Ollama returned empty response")
+                
+                return response_text
     
     def forward(self, path: str, prompt: Optional[str] = None) -> str:
         """Analyze the image and return description."""
@@ -88,25 +101,19 @@ class VisionSmolTool(Tool):
             prompt = "Describe the image briefly with actionable details."
         
         try:
-            # Load and process image
-            image = Image.open(path).convert("RGB")
-            inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device)
+            # Validate it's a valid image by opening it
+            Image.open(path).convert("RGB")
             
-            # Generate description
-            with torch.inference_mode():
-                out = self.model.generate(**inputs, max_new_tokens=256)
+            # Run async analysis in sync context
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
             
-            # Decode output
-            decoded = self.processor.batch_decode(out, skip_special_tokens=True)
-            if not decoded or len(decoded) == 0:
-                return "Error: Model returned empty output"
-            
-            text = decoded[0]
-            # Remove the prompt from the output if it's included
-            if prompt in text:
-                text = text.split(prompt, 1)[-1].strip()
-            
-            return text
+            result = loop.run_until_complete(self._analyze_image_async(path, prompt))
+            return result
         
         except Exception as e:
             return f"Error analyzing image: {str(e)}"
