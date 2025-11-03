@@ -169,8 +169,8 @@ class MainAgentSmol:
     
     def add_discord_tool(self, discord_service):
         """
-        Add Discord agent as a tool that internally uses ToolCallingAgent.
-        This creates a wrapper tool that delegates to a ToolCallingAgent for Discord operations.
+        Add Discord tool to the agent after initialization.
+        This allows Discord integration to be added dynamically when the service is available.
         
         Args:
             discord_service: The Discord bot service instance
@@ -179,13 +179,13 @@ class MainAgentSmol:
             bool: True if successfully added, False otherwise
         """
         try:
-            from src.agents.tools.discord_agent_tool import DiscordAgentTool
+            from src.agents.tools.discord_tool_smol import DiscordSmolTool
             
-            # Create Discord agent tool (wraps ToolCallingAgent)
-            discord_agent_tool = DiscordAgentTool(discord_service, self.model)
+            # Create Discord tool (direct tool, not wrapped in an agent)
+            discord_tool = DiscordSmolTool(discord_service)
             
             # Add to tools list
-            self.tools.append(discord_agent_tool)
+            self.tools.append(discord_tool)
             
             # Reinitialize the main CodeAgent with updated tools
             self.agent = CodeAgent(
@@ -199,15 +199,15 @@ class MainAgentSmol:
             )
             
             # Also register in registry for tracking
-            self.registry.register("discord_agent", discord_agent_tool, {
-                "name": discord_agent_tool.name,
-                "description": discord_agent_tool.description
+            self.registry.register("discord", discord_tool, {
+                "name": discord_tool.name,
+                "description": discord_tool.description
             })
             
-            print("Discord agent tool added successfully")
+            print("Discord tool added successfully")
             return True
         except Exception as e:
-            print(f"Warning: Could not add Discord agent tool: {e}")
+            print(f"Warning: Could not add Discord tool: {e}")
             import traceback
             traceback.print_exc()
             return False
