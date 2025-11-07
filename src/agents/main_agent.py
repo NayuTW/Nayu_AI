@@ -15,6 +15,9 @@ from src.agents.core.events import EventBus
 from src.agents.core.registry import ToolRegistry
 from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
+from src.agents.persona.persona import Persona, DEFAULT_PERSONA
+from src.agents.persona.mood import MoodTracker
+from src.agents.persona.proactive import ProactiveScheduler, ProactivePolicy, ProactiveAction
 
 # Import smolagents-compatible tools
 from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
@@ -25,16 +28,21 @@ from src.agents.tools.speech_smol import SpeechSmolTool
 from src.agents.tools.codeagent import CodeAgentTool
 
 
-# System prompt for the main agent
-SYSTEM_PROMPT = """You are a helpful, friendly AI assistant. Your primary role is to chat naturally with users and help them with their requests.
-
-CORE BEHAVIOR:
-- Be conversational, warm, and personable
-- Respond naturally to greetings, questions, and casual conversation
-- Only use tools when the user's request specifically requires them
-- Think: "Can I answer this directly, or do I need a tool?"
-- You may receive messages from multiple channels (e.g., cli, discord)
-
+def build_system_prompt(persona: Persona, mood_state: Optional[str] = None) -> str:
+    """
+    Build system prompt incorporating persona and mood.
+    
+    Args:
+        persona: The persona configuration
+        mood_state: Optional current mood state description
+    """
+    persona_prompt = persona.system_prompt()
+    
+    mood_context = ""
+    if mood_state:
+        mood_context = f"\nCURRENT MOOD: You're feeling {mood_state}. Let this subtly influence your tone and energy."
+    
+    base_instructions = """
 TOOL USAGE:
 - Use tools judiciously - not every request needs a tool
 - memory tool: Use 'remember' to store information, 'recall' to retrieve it
@@ -54,12 +62,13 @@ IMPORTANT - Processing Tool Outputs:
 - For vision tool: Get the description, understand what's in the image, then describe it naturally to the user
 - Your response should show understanding, not just echo what the tool said
 
-RESPONSE STYLE:
-- Be direct and conversational
-- Don't mention internal details like tool execution unless relevant
-- Provide helpful, actionable information
-- Keep responses concise but complete
+INTERACTION APPROACH:
+- You may receive messages from multiple channels (e.g., cli, discord)
+- Only use tools when the user's request specifically requires them
+- Think: "Can I answer this directly, or do I need a tool?"
 - Always provide your final response by calling the 'final_answer' function"""
+    
+    return f"{persona_prompt}{mood_context}\n{base_instructions}"
 
 
 class MainAgentSmol:
@@ -75,7 +84,8 @@ class MainAgentSmol:
         registry: ToolRegistry,
         notifier: Notifier,
         store: SQLiteStore,
-        session_id: str
+        session_id: str,
+        persona: Optional[Persona] = None
     ):
         self.state = state
         self.bus = bus
@@ -85,14 +95,33 @@ class MainAgentSmol:
         self.session_id = session_id
         self.os_context = ""  # Will be populated when desktop tool is initialized
         
+        # Initialize persona and mood tracking
+        self.persona = persona or DEFAULT_PERSONA
+        self.mood_tracker = MoodTracker(max_history=20)
+        
+        # Initialize proactive system (will be started by app.py)
+        policy = ProactivePolicy(mood_tracker=self.mood_tracker, randomness=0.3, temperature=1.0)
+        max_proactive = int(os.getenv("AGENT_PROACTIVE_MAX_PER_HOUR", "3"))
+        self.proactive_scheduler = ProactiveScheduler(
+            bus=bus,
+            policy=policy,
+            max_per_hour=max_proactive,
+            enabled=True
+        )
+        self.proactive_scheduler.set_callback(self._handle_proactive_action)
+        
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
         num_ctx = int(os.getenv("AGENT_NUM_CTX", "24576"))
         
+        # Adjust temperature based on persona creativity
+        base_temp = float(os.getenv("AGENT_TEMPERATURE", "0.7"))
+        adjusted_temp = base_temp + (self.persona.creativity * 0.4)  # 0.7 to 0.94
+        
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
             num_ctx=num_ctx,
-            temperature=0.7
+            temperature=adjusted_temp
         )
         
         # Initialize tools
@@ -222,27 +251,53 @@ class MainAgentSmol:
         channel_id: Optional[str] = None,
     ) -> str:
         """
-        Handle a user message using the CodeAgent.
+        Handle a user message using the CodeAgent with persona and mood tracking.
         """
-        # Get memory context
+        # Update mood tracker with user interaction
+        self.mood_tracker.update_from_interaction(user_text)
+        
+        # Update proactive scheduler context
+        self.proactive_scheduler.update_context(
+            last_user_msg_time=time.time(),
+            engagement=self.mood_tracker.interactions[-1].engagement if self.mood_tracker.interactions else 0.5
+        )
+        
+        # Get memory context with personality tidbits
         try:
             mem_tool = next((t for t in self.tools if t.name == "memory"), None)
             if mem_tool:
                 mem_digest = mem_tool.digest_for_context(user_text)
+                # Also try to recall personal tidbits or running gags
+                try:
+                    personal_context = mem_tool.forward(action="recall", text="personal tidbits running gags preferences", k=2)
+                    if personal_context and personal_context != "No matching memories found.":
+                        mem_digest += f"\nPersonal context: {personal_context}"
+                except Exception:
+                    pass
             else:
                 mem_digest = ""
         except Exception:
             mem_digest = ""
         
-        # Build context
+        # Build context with mood influence
         context = self.state.build_context(mem_digest)
+        mood_state = self.mood_tracker.get_mood_description()
+        mood_influence = self.mood_tracker.get_mood_influence()
         
-        # Build prompt with context
-        full_prompt = f"""{SYSTEM_PROMPT}
+        # Adjust persona based on mood
+        adjusted_persona_desc = f"Current emotional state: {mood_state}"
+        
+        # Build system prompt with persona
+        system_prompt = build_system_prompt(self.persona, mood_state)
+        
+        # Build full prompt with context
+        full_prompt = f"""{system_prompt}
 {self.os_context}
 
 CONTEXT:
 {context}
+
+{adjusted_persona_desc}
 
 MESSAGE SOURCE: {source}
 {f"USER_ID: {user_id}" if user_id else ""}
@@ -251,13 +306,14 @@ MESSAGE SOURCE: {source}
 USER MESSAGE:
 {user_text}
 
-Respond naturally and use tools only if needed."""
+Respond naturally with your personality. Use tools only if needed."""
         
         # Publish input event
         await self.bus.publish("agent.input", {
             "text": user_text,
             "source": source,
-            "meta": external_metadata or {}
+            "meta": external_metadata or {},
+            "mood": mood_state
         })
         
         try:
@@ -270,11 +326,18 @@ Respond naturally and use tools only if needed."""
             if not result or not result.strip():
                 result = "I processed your request."
             
-            # Persist the interaction
-            await self._persist_example(user_text, result, mem_digest, source, user_id, channel_id)
+            # Update proactive scheduler with agent response
+            self.proactive_scheduler.update_context(last_agent_msg_time=time.time())
             
-            # Publish output event
-            await self.bus.publish("agent.output", {"text": result, "latency_ms": latency_ms})
+            # Persist the interaction with mood info
+            await self._persist_example(user_text, result, mem_digest, source, user_id, channel_id, mood_state)
+            
+            # Publish output event with mood info
+            await self.bus.publish("agent.output", {
+                "text": result,
+                "latency_ms": latency_ms,
+                "mood": mood_state
+            })
             
             return result
             
@@ -294,15 +357,18 @@ Respond naturally and use tools only if needed."""
         memory_digest: str,
         source: str,
         user_id: Optional[str],
-        channel_id: Optional[str]
+        channel_id: Optional[str],
+        mood: Optional[str] = None
     ):
-        """Persist interaction for fine-tuning dataset."""
+        """Persist interaction for fine-tuning dataset with mood tracking."""
         meta = {
             "memory_digest": memory_digest,
             "tools_enabled": [name for name, rt in self.registry._tools.items() if rt.stats.enabled],
             "source": source,
             "user_id": user_id,
             "channel_id": channel_id,
+            "mood": mood,
+            "persona": self.persona.name,
         }
         ex_id = self.store.append_example(
             session_id=self.session_id,
@@ -312,6 +378,94 @@ Respond naturally and use tools only if needed."""
         )
         await self.bus.publish("dataset.example", {"id": ex_id, "label": "unlabeled"})
         return ex_id
+    
+    async def _handle_proactive_action(self, action: ProactiveAction, intent: str):
+        """
+        Handle proactive action from scheduler.
+        This generates an agent-initiated message.
+        """
+        try:
+            # Get memory context for riffs and stories
+            try:
+                mem_tool = next((t for t in self.tools if t.name == "memory"), None)
+                if mem_tool and action == ProactiveAction.RIFF:
+                    # Try to get recent topics from memory
+                    recent_topics = mem_tool.forward(action="recall", text="recent topics interests", k=3)
+                    if recent_topics and recent_topics != "No matching memories found.":
+                        intent = f"{intent}\nRecent context: {recent_topics}"
+            except Exception:
+                pass
+            
+            # Build system prompt
+            mood_state = self.mood_tracker.get_mood_description()
+            system_prompt = build_system_prompt(self.persona, mood_state)
+            
+            # Create a proactive prompt
+            proactive_prompt = f"""{system_prompt}
+
+PROACTIVE INTERACTION:
+You're initiating a conversation on your own. Be natural and engaging.
+
+ACTION TYPE: {action.value}
+INTENT: {intent}
+
+Generate a brief, natural message to the user. Keep it short and conversational."""
+            
+            # Generate response
+            t0 = time.time()
+            result = await asyncio.to_thread(self.agent.run, proactive_prompt)
+            latency_ms = (time.time() - t0) * 1000
+            
+            if not result or not result.strip():
+                result = intent  # Fall back to template
+            
+            # Publish event for proactive message
+            await self.bus.publish("agent.proactive", {
+                "text": result,
+                "action": action.value,
+                "mood": mood_state,
+                "latency_ms": latency_ms
+            })
+            
+            # Note: The CLI or Discord adapter should listen to this event
+            # and display the proactive message
+            
+        except Exception as e:
+            await self.bus.publish("proactive.error", {"error": str(e)})
+    
+    def get_persona_state(self) -> Dict[str, Any]:
+        """Get current persona and mood state for dashboard."""
+        return {
+            "persona": {
+                "name": self.persona.name,
+                "backstory": self.persona.backstory,
+                "playfulness": self.persona.playfulness,
+                "curiosity": self.persona.curiosity,
+                "helpfulness": self.persona.helpfulness,
+                "talkativeness": self.persona.talkativeness,
+                "humor_level": self.persona.humor_level,
+                "creativity": self.persona.creativity,
+                "formality": self.persona.formality,
+            },
+            "mood": self.mood_tracker.get_state(),
+            "proactive": {
+                "enabled": self.proactive_scheduler.enabled,
+                "max_per_hour": self.proactive_scheduler.max_per_hour,
+                "count_this_hour": self.proactive_scheduler._proactive_count,
+            }
+        }
+    
+    def update_persona_drive(self, drive: str, value: float):
+        """Update a persona drive value."""
+        if hasattr(self.persona, drive):
+            setattr(self.persona, drive, max(0.0, min(1.0, value)))
+            # Save to store
+            self.store.set_setting(f"persona_{drive}", str(value))
+    
+    def set_proactive_enabled(self, enabled: bool):
+        """Enable or disable proactive behavior."""
+        self.proactive_scheduler.enabled = enabled
+        self.store.set_setting("proactive_enabled", "1" if enabled else "0")
     
     async def handle_external_message(
         self,

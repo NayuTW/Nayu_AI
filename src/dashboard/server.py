@@ -19,6 +19,7 @@ registry: ToolRegistry = None
 health: HealthChecker = None
 store: SQLiteStore = None
 notifier: Notifier = None
+agent = None  # MainAgentSmol instance for persona access
 
 EXPORT_DIR = "src/dashboard/static/exports"
 os.makedirs(EXPORT_DIR, exist_ok=True)
@@ -212,10 +213,79 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         await bus.unsubscribe(q)
 
-def init_dashboard(shared_bus: EventBus, shared_registry: ToolRegistry, shared_health: HealthChecker, shared_store: SQLiteStore, shared_notifier: Notifier):
-    global bus, registry, health, store, notifier
+def init_dashboard(shared_bus: EventBus, shared_registry: ToolRegistry, shared_health: HealthChecker, shared_store: SQLiteStore, shared_notifier: Notifier, shared_agent=None):
+    global bus, registry, health, store, notifier, agent
     bus = shared_bus
     registry = shared_registry
     health = shared_health
     store = shared_store
     notifier = shared_notifier
+    agent = shared_agent
+
+
+@app.get("/persona", response_class=HTMLResponse)
+async def persona_partial():
+    """Get persona and mood status display."""
+    if not agent:
+        return HTMLResponse("<div id='persona'>Persona system not available</div>")
+    
+    persona_state = agent.get_persona_state()
+    p = persona_state['persona']
+    m = persona_state['mood']
+    pr = persona_state['proactive']
+    
+    html = f'''
+    <div id="persona" style="margin-top: 20px;">
+      <h3>{p['name']}'s Persona & Mood</h3>
+      <table border="1" cellspacing="0" cellpadding="6">
+        <tr><th colspan="2">Personality Drives</th></tr>
+        <tr><td>Playfulness</td><td>{p['playfulness']:.2f} <a href="#" hx-post="/persona/adjust?drive=playfulness&delta=0.1" hx-target="#persona" hx-swap="outerHTML">+</a> <a href="#" hx-post="/persona/adjust?drive=playfulness&delta=-0.1" hx-target="#persona" hx-swap="outerHTML">-</a></td></tr>
+        <tr><td>Curiosity</td><td>{p['curiosity']:.2f} <a href="#" hx-post="/persona/adjust?drive=curiosity&delta=0.1" hx-target="#persona" hx-swap="outerHTML">+</a> <a href="#" hx-post="/persona/adjust?drive=curiosity&delta=-0.1" hx-target="#persona" hx-swap="outerHTML">-</a></td></tr>
+        <tr><td>Helpfulness</td><td>{p['helpfulness']:.2f} <a href="#" hx-post="/persona/adjust?drive=helpfulness&delta=0.1" hx-target="#persona" hx-swap="outerHTML">+</a> <a href="#" hx-post="/persona/adjust?drive=helpfulness&delta=-0.1" hx-target="#persona" hx-swap="outerHTML">-</a></td></tr>
+        <tr><td>Talkativeness</td><td>{p['talkativeness']:.2f} <a href="#" hx-post="/persona/adjust?drive=talkativeness&delta=0.1" hx-target="#persona" hx-swap="outerHTML">+</a> <a href="#" hx-post="/persona/adjust?drive=talkativeness&delta=-0.1" hx-target="#persona" hx-swap="outerHTML">-</a></td></tr>
+        <tr><td>Humor Level</td><td>{p['humor_level']:.2f} <a href="#" hx-post="/persona/adjust?drive=humor_level&delta=0.1" hx-target="#persona" hx-swap="outerHTML">+</a> <a href="#" hx-post="/persona/adjust?drive=humor_level&delta=-0.1" hx-target="#persona" hx-swap="outerHTML">-</a></td></tr>
+        <tr><th colspan="2">Current Mood</th></tr>
+        <tr><td>State</td><td>{m['mood_description']}</td></tr>
+        <tr><td>Sentiment</td><td>{m['recent_sentiment']:.2f}</td></tr>
+        <tr><td>Engagement</td><td>{m['recent_engagement']:.2f}</td></tr>
+        <tr><th colspan="2">Proactive Behavior</th></tr>
+        <tr><td>Status</td><td>{"Enabled" if pr['enabled'] else "Disabled"}</td></tr>
+        <tr><td>Max/Hour</td><td>{pr['max_per_hour']}</td></tr>
+        <tr><td>This Hour</td><td>{pr['count_this_hour']}</td></tr>
+      </table>
+      <form hx-post="/persona/toggle_proactive" hx-target="#persona" hx-swap="outerHTML" style="margin-top: 10px;">
+        <button>{'Disable' if pr['enabled'] else 'Enable'} Proactive</button>
+      </form>
+    </div>
+    '''
+    return HTMLResponse(html)
+
+
+@app.post("/persona/adjust", response_class=HTMLResponse)
+async def adjust_persona(drive: str, delta: float):
+    """Adjust a persona drive value."""
+    if not agent:
+        return await persona_partial()
+    
+    try:
+        current = getattr(agent.persona, drive)
+        new_value = max(0.0, min(1.0, current + delta))
+        agent.update_persona_drive(drive, new_value)
+        await bus.publish("persona.adjust", {"drive": drive, "value": new_value})
+    except Exception as e:
+        await bus.publish("persona.error", {"error": str(e)})
+    
+    return await persona_partial()
+
+
+@app.post("/persona/toggle_proactive", response_class=HTMLResponse)
+async def toggle_proactive():
+    """Toggle proactive behavior on/off."""
+    if not agent:
+        return await persona_partial()
+    
+    enabled = not agent.proactive_scheduler.enabled
+    agent.set_proactive_enabled(enabled)
+    await bus.publish("proactive.toggle", {"enabled": enabled})
+    
+    return await persona_partial()

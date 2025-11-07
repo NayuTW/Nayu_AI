@@ -24,10 +24,10 @@ from src.dashboard.server import init_dashboard
 logger = logging.getLogger(__name__)
 
 
-async def start_dashboard(bus, registry, health, store, notifier):
+async def start_dashboard(bus, registry, health, store, notifier, agent=None):
     """Start the FastAPI dashboard server."""
     from src.dashboard.server import app
-    init_dashboard(bus, registry, health, store, notifier)
+    init_dashboard(bus, registry, health, store, notifier, agent)
     host = os.getenv("AGENT_DASH_HOST", "0.0.0.0")
     port = int(os.getenv("AGENT_DASH_PORT", "8008"))
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
@@ -91,16 +91,45 @@ async def main():
     # Create session ID
     session_id = f"session-{int(time.time())}-{uuid.uuid4().hex[:8]}"
     
-    # Initialize main agent (smolagents CodeAgent)
-    logger.info("Initializing MainAgentSmol with smolagents CodeAgent...")
+    # Initialize main agent (smolagents CodeAgent) with persona
+    logger.info("Initializing MainAgentSmol with smolagents CodeAgent and persona system...")
+    
+    # Load persona from store if available
+    from src.agents.persona.persona import Persona, DEFAULT_PERSONA
+    try:
+        persona_data = {}
+        for key in ['name', 'playfulness', 'curiosity', 'helpfulness', 'talkativeness', 'humor_level', 'creativity', 'formality']:
+            val = store.get_setting(f"persona_{key}")
+            if val:
+                try:
+                    persona_data[key] = float(val) if key != 'name' else val
+                except ValueError:
+                    pass
+        
+        if persona_data:
+            # Create persona with stored settings
+            persona = Persona(**{**DEFAULT_PERSONA.to_dict(), **persona_data})
+        else:
+            persona = DEFAULT_PERSONA
+    except Exception as e:
+        logger.warning(f"Could not load persona settings: {e}")
+        persona = DEFAULT_PERSONA
+    
     agent = MainAgentSmol(
         state=state,
         bus=bus,
         registry=registry,
         notifier=notifier,
         store=store,
-        session_id=session_id
+        session_id=session_id,
+        persona=persona
     )
+
+    # Start proactive scheduler
+    proactive_enabled = store.get_setting("proactive_enabled", "1") == "1"
+    agent.proactive_scheduler.enabled = proactive_enabled
+    await agent.proactive_scheduler.start()
+    logger.info(f"Proactive scheduler started (enabled={proactive_enabled})")
 
     # Start health checker
     health = HealthChecker(bus=bus, interval_s=15)
@@ -127,8 +156,8 @@ async def main():
     
     flush_task = asyncio.create_task(periodic_flush())
 
-    # Start dashboard
-    asyncio.create_task(start_dashboard(bus, registry, health, store, notifier))
+    # Start dashboard with agent for persona access
+    asyncio.create_task(start_dashboard(bus, registry, health, store, notifier, agent))
     
     # Start Discord bot if configured
     discord_service = await start_discord_bot(agent)
@@ -152,18 +181,38 @@ async def main():
         except Exception as e:
             logger.exception("Failed to integrate Discord tool: %s", e)
 
+    # Subscribe to proactive events for CLI display
+    async def proactive_listener():
+        """Listen for proactive messages and display them in CLI."""
+        event_queue = await bus.subscribe()
+        while True:
+            try:
+                event = await event_queue.get()
+                if event.type == "agent.proactive":
+                    print(f"\n{agent.persona.name}: {event.payload.get('text', '')}")
+                    print("You: ", end="", flush=True)
+            except Exception as e:
+                logger.exception(f"Error in proactive listener: {e}")
+    
+    proactive_task = asyncio.create_task(proactive_listener())
+
     # Print startup information
     print("=" * 60)
-    print("Nayu_AI Agent + Dashboard (smolagents architecture)")
+    print("Nayu_AI Agent + Dashboard (with Character System)")
     print("=" * 60)
     print(f"Dashboard: http://<vm-ip>:8008")
     if discord_service:
         print("Discord bot: RUNNING")
     print(f"Session: {session_id}")
+    print(f"Persona: {agent.persona.name} (proactive: {'ON' if proactive_enabled else 'OFF'})")
     print()
     print("Commands:")
     print("  'voice on'       - Enable voice notifications")
     print("  'voice off'      - Disable voice notifications")
+    print("  'proactive on'   - Enable proactive behavior")
+    print("  'proactive off'  - Disable proactive behavior")
+    print("  '/mood'          - Show current mood state")
+    print("  '/persona'       - Show persona details")
     print("  '/reset-session' - Clear conversation history")
     print("  '/sessions'      - List all sessions")
     print("  'quit'           - Exit the application")
@@ -192,21 +241,45 @@ async def main():
                 print("Voice disabled.")
                 continue
             
+            if user.strip().lower() == "proactive on":
+                agent.set_proactive_enabled(True)
+                print("Proactive behavior enabled.")
+                continue
+            
+            if user.strip().lower() == "proactive off":
+                agent.set_proactive_enabled(False)
+                print("Proactive behavior disabled.")
+                continue
+            
+            if user.strip().lower() == "/mood":
+                mood_state = agent.mood_tracker.get_state()
+                print(f"Current mood: {mood_state['mood_description']}")
+                print(f"Recent sentiment: {mood_state['recent_sentiment']}")
+                print(f"Recent engagement: {mood_state['recent_engagement']}")
+                continue
+            
+            if user.strip().lower() == "/persona":
+                persona_state = agent.get_persona_state()
+                p = persona_state['persona']
+                print(f"Persona: {p['name']}")
+                print(f"  Playfulness: {p['playfulness']:.1f}")
+                print(f"  Curiosity: {p['curiosity']:.1f}")
+                print(f"  Helpfulness: {p['helpfulness']:.1f}")
+                print(f"  Talkativeness: {p['talkativeness']:.1f}")
+                print(f"  Humor: {p['humor_level']:.1f}")
+                print(f"Mood: {persona_state['mood']['mood_description']}")
+                continue
+            
             # Handle session commands
             if user.strip().lower() == "/reset-session":
-                agent.reset_session()
-                print(f"Session {session_id} has been reset. Conversation history cleared.")
+                # Note: reset_session method doesn't exist in current implementation
+                # We'll just note this for now
+                print(f"Session reset not implemented yet.")
                 continue
             
             if user.strip().lower() == "/sessions":
-                sessions = agent.list_sessions()
-                if sessions:
-                    print(f"Available sessions ({len(sessions)}):")
-                    for s in sessions:
-                        current = " (current)" if s == session_id else ""
-                        print(f"  - {s}{current}")
-                else:
-                    print("No saved sessions found.")
+                # Note: list_sessions method doesn't exist in current implementation
+                print("Session listing not implemented yet.")
                 continue
             
             # Process user message

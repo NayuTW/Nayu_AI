@@ -41,6 +41,11 @@
   </div>
 
   <div style="margin-top:16px">
+    <h2>Character & Persona</h2>
+    <div id="persona" hx-get="/persona" hx-trigger="load" hx-target="#persona">Loading...</div>
+  </div>
+
+  <div style="margin-top:16px">
     <h2>Dataset curation</h2>
     <div id="examples-container" hx-get="/examples" hx-trigger="load" hx-target="#examples-container">Loading...</div>
   </div>
@@ -82,6 +87,9 @@
         }
         if (msg.type === 'dataset.example' || msg.type === 'dataset.label' || msg.type === 'agent.output' || msg.type === 'dataset.export') {
             htmx.ajax('GET', '/examples', {target:'#examples-container', swap:'innerHTML'});
+        }
+        if (msg.type.startsWith('persona.') || msg.type.startsWith('proactive.') || msg.type === 'agent.input') {
+            htmx.ajax('GET', '/persona', {target:'#persona', swap:'outerHTML'});
         }
     };
   </script>
