@@ -263,7 +263,7 @@ class VoiceSession:
                 
                 if utterance:
                     # User speech detected - interrupt AI if speaking
-                    if self.mixer and self.mixer._ai_speaking:
+                    if self.mixer and self.mixer.is_ai_speaking():
                         logger.info("User interrupt detected, stopping AI")
                         self.mixer.clear_tts_queue()
                         await self.bus.publish("voice.interrupt", {

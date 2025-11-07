@@ -123,6 +123,15 @@ class AudioMixer:
         self._ai_speaking = False
         logger.debug("TTS queue cleared")
     
+    def is_ai_speaking(self) -> bool:
+        """
+        Check if AI is currently speaking.
+        
+        Returns:
+            True if AI is speaking, False otherwise.
+        """
+        return self._ai_speaking
+    
     async def _mix_loop(self) -> None:
         """
         Background mixing loop.

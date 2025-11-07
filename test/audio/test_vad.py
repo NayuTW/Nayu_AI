@@ -32,9 +32,7 @@ except ImportError:
         @staticmethod
         def main(args):
             print("pytest not available, running tests manually...")
-            import inspect
-            current_module = sys.modules[__name__]
-            for name, obj in inspect.getmembers(current_module):
+            for name, obj in globals().items():
                 if name.startswith('test_') and callable(obj):
                     try:
                         print(f"Running {name}...", end=" ")

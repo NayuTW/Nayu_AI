@@ -38,10 +38,13 @@ def list_audio_devices() -> Dict[str, List[Dict[str, any]]]:
     try:
         sd_devices = sd.query_devices()
         for idx, dev in enumerate(sd_devices):
+            # Determine channel count (prefer input channels, fallback to output)
+            channels = dev["max_input_channels"] if dev["max_input_channels"] > 0 else dev["max_output_channels"]
+            
             dev_info = {
                 "index": idx,
                 "name": dev["name"],
-                "channels": dev["max_input_channels"] if dev["max_input_channels"] > 0 else dev["max_output_channels"],
+                "channels": channels,
                 "sample_rate": int(dev["default_samplerate"]),
             }
             

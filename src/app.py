@@ -74,9 +74,10 @@ async def main():
     bus = EventBus(store=store)
     registry = ToolRegistry(store=store)
 
-    # Initialize notifier
+    # Initialize notifier and speech tool
     speak_on_error = store.get_setting("speak_on_error", "1") == "1"
     voice_enabled = store.get_setting("voice_enabled", "0") == "1"
+    speech_tool = None
 
     try:
         speech_tool = SpeechSmolTool()
@@ -155,7 +156,7 @@ async def main():
             enable_user_mic = store.get_setting("voice_session_user_mic", "0") == "1"
             voice_session = VoiceSession(
                 event_bus=bus,
-                speech_tool=speech_tool if 'speech_tool' in locals() else None,
+                speech_tool=speech_tool,
                 store=store,
                 enable_user_mic=enable_user_mic,
             )
