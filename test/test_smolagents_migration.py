@@ -98,7 +98,7 @@ def test_imports():
     # Test 8: MainAgentSmol
     print("\n8. Testing MainAgentSmol...")
     try:
-        from src.agents.main_agent import MainAgentSmol
+        from src.agents.main_agent_smol import MainAgentSmol
         from src.agents.state import SharedState
         from src.agents.core.events import EventBus
         from src.agents.core.registry import ToolRegistry

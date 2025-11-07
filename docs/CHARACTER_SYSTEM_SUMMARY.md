@@ -44,7 +44,7 @@ All features from the problem statement have been implemented:
 - Personal context injected into system prompts
 - Proactive actions can reference recent topics
 
-**Location**: `src/agents/main_agent.py` (integration)
+**Location**: `src/agents/main_agent_smol.py` (integration)
 
 #### 5. Content Scaffolds ✅
 - **IntentTemplate** class with micro-activities
@@ -105,7 +105,7 @@ All features from the problem statement have been implemented:
 - **Small local classifier**: Simple keyword-based (can upgrade to MiniLM)
 - **CPU-friendly**: Mood tracking runs on CPU
 
-**Location**: `src/agents/main_agent.py`
+**Location**: `src/agents/main_agent_smol.py`
 
 ## File Structure
 
@@ -116,7 +116,7 @@ src/agents/persona/
 ├── mood.py              # Mood tracking and sentiment analysis
 └── proactive.py         # Proactive scheduler and policy
 
-src/agents/main_agent.py # Integration point
+src/agents/main_agent_smol.py # Integration point
 src/app.py               # Startup and CLI
 src/dashboard/
 ├── server.py            # Dashboard API endpoints

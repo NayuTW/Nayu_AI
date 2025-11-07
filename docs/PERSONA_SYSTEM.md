@@ -385,7 +385,7 @@ Check:
 
 ## References
 
-- Main agent: `src/agents/main_agent.py`
+- Main agent: `src/agents/main_agent_smol.py`
 - Persona module: `src/agents/persona/`
 - Dashboard server: `src/dashboard/server.py`
 - Tests: `test/test_persona_system.py`
