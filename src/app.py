@@ -203,6 +203,8 @@ async def main():
     print(f"Dashboard: http://<vm-ip>:8008")
     if discord_service:
         print("Discord bot: RUNNING")
+        discord_proactive_state = agent.get_discord_proactive_state()
+        print(f"Discord proactive: {'ON' if discord_proactive_state['enabled'] else 'OFF'}")
     print(f"Session: {session_id}")
     print(f"Persona: {agent.persona.name} (proactive: {'ON' if proactive_enabled else 'OFF'})")
     print()
@@ -211,6 +213,14 @@ async def main():
     print("  'voice off'      - Disable voice notifications")
     print("  'proactive on'   - Enable proactive behavior")
     print("  'proactive off'  - Disable proactive behavior")
+    if discord_service:
+        print("  'discord proactive on'      - Enable Discord proactive messaging")
+        print("  'discord proactive off'     - Disable Discord proactive messaging")
+        print("  'discord add user <target>' - Add user to proactive DM list")
+        print("  'discord rm user <target>'  - Remove user from proactive DM list")
+        print("  'discord add channel <target> [guild_id]' - Add channel to proactive list")
+        print("  'discord rm channel <target> [guild_id]'  - Remove channel from proactive list")
+        print("  'discord list'   - Show Discord proactive configuration")
     print("  '/mood'          - Show current mood state")
     print("  '/persona'       - Show persona details")
     print("  '/reset-session' - Clear conversation history")
@@ -250,6 +260,72 @@ async def main():
                 agent.set_proactive_enabled(False)
                 print("Proactive behavior disabled.")
                 continue
+            
+            # Discord proactive commands
+            if discord_service:
+                if user.strip().lower() == "discord proactive on":
+                    agent.set_discord_proactive_enabled(True)
+                    print("Discord proactive messaging enabled.")
+                    continue
+                
+                if user.strip().lower() == "discord proactive off":
+                    agent.set_discord_proactive_enabled(False)
+                    print("Discord proactive messaging disabled.")
+                    continue
+                
+                if user.strip().lower().startswith("discord add user "):
+                    target = user.strip()[17:].strip()
+                    if target:
+                        agent.add_discord_proactive_user(target)
+                        print(f"Added user '{target}' to Discord proactive DM list.")
+                    else:
+                        print("Error: Please provide a user target (e.g., '@username' or user ID)")
+                    continue
+                
+                if user.strip().lower().startswith("discord rm user "):
+                    target = user.strip()[16:].strip()
+                    if target:
+                        agent.remove_discord_proactive_user(target)
+                        print(f"Removed user '{target}' from Discord proactive DM list.")
+                    else:
+                        print("Error: Please provide a user target")
+                    continue
+                
+                if user.strip().lower().startswith("discord add channel "):
+                    parts = user.strip()[20:].strip().split()
+                    if parts:
+                        channel_target = parts[0]
+                        guild_id = int(parts[1]) if len(parts) > 1 else None
+                        agent.add_discord_proactive_channel(channel_target, guild_id)
+                        print(f"Added channel '{channel_target}' to Discord proactive list.")
+                    else:
+                        print("Error: Please provide a channel target (e.g., '#general' or channel ID)")
+                    continue
+                
+                if user.strip().lower().startswith("discord rm channel "):
+                    parts = user.strip()[19:].strip().split()
+                    if parts:
+                        channel_target = parts[0]
+                        guild_id = int(parts[1]) if len(parts) > 1 else None
+                        agent.remove_discord_proactive_channel(channel_target, guild_id)
+                        print(f"Removed channel '{channel_target}' from Discord proactive list.")
+                    else:
+                        print("Error: Please provide a channel target")
+                    continue
+                
+                if user.strip().lower() == "discord list":
+                    discord_state = agent.get_discord_proactive_state()
+                    print("Discord Proactive Configuration:")
+                    print(f"  Enabled: {discord_state['enabled']}")
+                    print(f"  Policy Enabled: {discord_state['policy_enabled']}")
+                    print(f"  Known Users ({len(discord_state['known_users'])}):")
+                    for u in discord_state['known_users']:
+                        print(f"    - {u}")
+                    print(f"  Known Channels ({len(discord_state['known_channels'])}):")
+                    for c in discord_state['known_channels']:
+                        guild_info = f" (guild: {c.get('guild_id')})" if c.get('guild_id') else ""
+                        print(f"    - {c['target']}{guild_info}")
+                    continue
             
             if user.strip().lower() == "/mood":
                 mood_state = agent.mood_tracker.get_state()
