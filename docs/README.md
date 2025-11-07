@@ -67,6 +67,8 @@ Without reference audio configured, the speech tool will print text instead of g
 
 For detailed TTS setup instructions, see [docs/TTS_SETUP.md](docs/TTS_SETUP.md).
 
+For live voice loopback with Discord (listen to participants, transcribe in real-time), see [docs/VOICE_LOOPBACK_MANJARO.md](docs/VOICE_LOOPBACK_MANJARO.md).
+
 Start services (dashboard binds 0.0.0.0 by default so your host can access the VM’s dashboard):
 ```bash
 python -m src.app

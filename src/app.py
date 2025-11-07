@@ -145,6 +145,30 @@ async def main():
     )
     await error_speaker.start()
 
+    # Start voice session if enabled
+    voice_session = None
+    voice_session_enabled = os.getenv("VOICE_SESSION", "0") == "1"
+    if voice_session_enabled:
+        try:
+            from src.agents.voice.session import VoiceSession
+            
+            enable_user_mic = store.get_setting("voice_session_user_mic", "0") == "1"
+            voice_session = VoiceSession(
+                event_bus=bus,
+                speech_tool=speech_tool if 'speech_tool' in locals() else None,
+                store=store,
+                enable_user_mic=enable_user_mic,
+            )
+            
+            if await voice_session.start():
+                logger.info("Voice session started successfully")
+            else:
+                logger.warning("Voice session failed to start")
+                voice_session = None
+        except Exception as e:
+            logger.exception(f"Failed to initialize voice session: {e}")
+            voice_session = None
+
     # Start periodic database flush task
     async def periodic_flush():
         while True:
@@ -298,6 +322,11 @@ async def main():
                 await flush_task
             except asyncio.CancelledError:
                 pass
+        
+        # Cleanup voice session
+        if voice_session:
+            logger.info("Shutting down voice session...")
+            await voice_session.stop()
         
         # Cleanup Discord bot on exit
         if discord_service:

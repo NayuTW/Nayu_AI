@@ -94,6 +94,7 @@ async def test_tool(name: str = Form(...)):
 async def settings_partial():
     speak_on_error = notifier.speak_on_error
     voice_enabled = notifier.voice_enabled
+    voice_session_user_mic = store.get_setting("voice_session_user_mic", "0") == "1"
     html = f'''
     <div id="settings">
       <form hx-post="/settings/toggle_speak_on_error" hx-target="#settings" hx-swap="outerHTML" style="display:inline">
@@ -105,6 +106,13 @@ async def settings_partial():
         <button>{'Disable' if voice_enabled else 'Enable'} Voice</button>
       </form>
       <span style="margin-left:8px">Voice: <b>{'ON' if voice_enabled else 'OFF'}</b></span>
+      <br/>
+      <form hx-post="/settings/toggle_voice_session_user_mic" hx-target="#settings" hx-swap="outerHTML" style="display:inline">
+        <button>{'Disable' if voice_session_user_mic else 'Enable'} User Mic Transcription</button>
+      </form>
+      <span style="margin-left:8px">User Mic Transcription: <b>{'ON' if voice_session_user_mic else 'OFF'}</b></span>
+      <br/>
+      <small style="color:#666">Note: Voice session is controlled via VOICE_SESSION environment variable at startup.</small>
     </div>
     '''
     return HTMLResponse(html)
@@ -121,6 +129,14 @@ async def toggle_voice():
     notifier.set_voice(not notifier.voice_enabled)
     store.set_setting("voice_enabled", "1" if notifier.voice_enabled else "0")
     await bus.publish("settings.update", {"voice_enabled": notifier.voice_enabled})
+    return await settings_partial()
+
+@app.post("/settings/toggle_voice_session_user_mic", response_class=HTMLResponse)
+async def toggle_voice_session_user_mic():
+    current = store.get_setting("voice_session_user_mic", "0") == "1"
+    new_value = "0" if current else "1"
+    store.set_setting("voice_session_user_mic", new_value)
+    await bus.publish("settings.update", {"voice_session_user_mic": new_value == "1"})
     return await settings_partial()
 
 @app.get("/examples", response_class=HTMLResponse)
