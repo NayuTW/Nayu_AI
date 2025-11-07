@@ -4,10 +4,16 @@ Supports ducking (reducing mic volume when AI speaks).
 """
 import asyncio
 import logging
-import numpy as np
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    logger.warning("numpy not available, mixer disabled")
 
 try:
     import sounddevice as sd
@@ -37,8 +43,8 @@ class AudioMixer:
             frame_ms: Frame duration in ms.
             ducking_db: dB reduction for mic when AI speaks (negative value).
         """
-        if not SOUNDDEVICE_AVAILABLE:
-            raise RuntimeError("sounddevice not available")
+        if not SOUNDDEVICE_AVAILABLE or not NUMPY_AVAILABLE:
+            raise RuntimeError("sounddevice and numpy required for mixer")
         
         self.output_device = output_device
         self.sample_rate = sample_rate
@@ -184,7 +190,7 @@ class AudioMixer:
         self,
         mic_frame: Optional[bytes],
         tts_frame: Optional[bytes],
-    ) -> Optional[np.ndarray]:
+    ) -> Optional[any]:
         """
         Mix mic and TTS frames with ducking.
         

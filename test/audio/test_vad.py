@@ -2,8 +2,48 @@
 Basic tests for VAD functionality.
 Tests voice activity detection and frame buffering.
 """
-import pytest
 import struct
+import sys
+
+# Try to import pytest, but allow tests to run standalone
+try:
+    import pytest
+    PYTEST_AVAILABLE = True
+except ImportError:
+    PYTEST_AVAILABLE = False
+    # Create a simple skip function for standalone mode
+    class _MockPytest:
+        @staticmethod
+        def skip(msg):
+            print(f"SKIP: {msg}")
+            return
+        
+        @staticmethod
+        def raises(exc):
+            class _RaisesContext:
+                def __enter__(self):
+                    return self
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    if exc_type is None:
+                        raise AssertionError(f"Expected {exc} to be raised")
+                    return exc_type == exc
+            return _RaisesContext()
+        
+        @staticmethod
+        def main(args):
+            print("pytest not available, running tests manually...")
+            import inspect
+            current_module = sys.modules[__name__]
+            for name, obj in inspect.getmembers(current_module):
+                if name.startswith('test_') and callable(obj):
+                    try:
+                        print(f"Running {name}...", end=" ")
+                        obj()
+                        print("PASS")
+                    except Exception as e:
+                        print(f"FAIL: {e}")
+    
+    pytest = _MockPytest()
 
 
 def test_vad_import():

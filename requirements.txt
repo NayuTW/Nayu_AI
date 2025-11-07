@@ -44,3 +44,4 @@ py-cord>=2.6.1
 webrtcvad>=2.0.10
 pulsectl>=24.8.0
 sounddevice>=0.5.1
+numpy>=1.24.0
