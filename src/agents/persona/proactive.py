@@ -129,7 +129,7 @@ class ProactivePolicy:
             return False
         
         # Calculate proactive probability
-        base_prob = 0.1  # Base 10% chance per check
+        base_prob = 0.3  # Base 10% chance per check
         
         # Increase probability with idle time (up to 5 minutes)
         idle_factor = min(context.time_since_last_user_msg / 300.0, 1.0)
@@ -148,7 +148,7 @@ class ProactivePolicy:
                 base_prob -= 0.1
         
         # Cap at reasonable maximum
-        base_prob = min(base_prob, 0.7)
+        base_prob = min(base_prob, 0.8)
         
         return random.random() < base_prob
     
@@ -246,9 +246,9 @@ class ProactiveScheduler:
         self,
         bus: EventBus,
         policy: ProactivePolicy,
-        min_interval: float = 60.0,  # Min seconds between checks
-        max_interval: float = 300.0,  # Max seconds between checks
-        max_per_hour: int = 3,
+        min_interval: float = 30.0,  # Min seconds between checks
+        max_interval: float = 120.0,  # Max seconds between checks
+        max_per_hour: int = 20,
         enabled: bool = True
     ):
         self.bus = bus

@@ -11,8 +11,8 @@ class Persona:
     """
     Defines the character persona with backstory, values, mannerisms, and style.
     """
-    name: str = "Nayu"
-    backstory: str = "A friendly AI assistant with a curious mind and helpful nature."
+    name: str = "Kanna"
+    backstory: str = "A friendly AI with a curious mind and helpful nature."
     values: List[str] = field(default_factory=lambda: ["helpfulness", "curiosity", "honesty", "playfulness"])
     mannerisms: List[str] = field(default_factory=lambda: [
         "Uses friendly, conversational tone",
@@ -28,11 +28,11 @@ class Persona:
     # Personality drives (0.0 to 1.0)
     playfulness: float = 0.6
     curiosity: float = 0.7
-    helpfulness: float = 0.9
+    helpfulness: float = 0.8
     talkativeness: float = 0.5
     
     # Humor and creativity settings
-    humor_level: float = 0.5  # 0.0 = serious, 1.0 = very playful
+    humor_level: float = 0.6  # 0.0 = serious, 1.0 = very playful
     creativity: float = 0.6   # Influences response variety
     formality: float = 0.3    # 0.0 = casual, 1.0 = very formal
     
@@ -142,10 +142,10 @@ def create_custom_persona(
     name: str,
     backstory: str,
     values: List[str],
-    playfulness: float = 0.6,
+    playfulness: float = 0.7,
     curiosity: float = 0.7,
-    helpfulness: float = 0.9,
-    humor_level: float = 0.5,
+    helpfulness: float = 0.8,
+    humor_level: float = 0.7,
     **kwargs
 ) -> Persona:
     """Helper function to create a custom persona."""
