@@ -22,6 +22,8 @@ class ProactiveAction(Enum):
     CHECK_IN = "check_in"
     RIFF = "riff"
     SILENT = "silent"
+    DISCORD_DM_RANDOM_USER = "discord_dm_random_user"
+    DISCORD_MESSAGE_CHANNEL = "discord_message_channel"
 
 
 @dataclass
@@ -76,6 +78,22 @@ class IntentTemplate:
         "This might sound random, but {topic}"
     ]
     
+    DISCORD_DM_GREETINGS = [
+        "Hey! Hope you're doing well. Just wanted to reach out and say hi!",
+        "Hi there! I was thinking about our last conversation. How have you been?",
+        "Hello! Just checking in - is there anything I can help you with?",
+        "Hey! Thought I'd drop by and see how things are going.",
+        "Hi! Hope your day is going great. Feel free to chat if you'd like!"
+    ]
+    
+    DISCORD_CHANNEL_MESSAGES = [
+        "Hey everyone! Hope you're all having a great day!",
+        "Just popping in to say hi! What's everyone up to?",
+        "Hello! Anyone want to chat or need help with anything?",
+        "Hi all! Checking in - feel free to reach out if you need anything!",
+        "Good vibes to everyone here! Let me know if I can assist with anything."
+    ]
+    
     @classmethod
     def get_question(cls) -> str:
         return random.choice(cls.QUESTIONS)
@@ -95,6 +113,14 @@ class IntentTemplate:
     @classmethod
     def get_riff(cls, topic: str = "how language shapes thought") -> str:
         return random.choice(cls.RIFFS).format(topic=topic)
+    
+    @classmethod
+    def get_discord_dm_greeting(cls) -> str:
+        return random.choice(cls.DISCORD_DM_GREETINGS)
+    
+    @classmethod
+    def get_discord_channel_message(cls) -> str:
+        return random.choice(cls.DISCORD_CHANNEL_MESSAGES)
 
 
 class ProactivePolicy:
@@ -112,6 +138,7 @@ class ProactivePolicy:
         self.mood_tracker = mood_tracker
         self.randomness = randomness
         self.temperature = temperature
+        self.discord_enabled = False  # Will be set by ProactiveScheduler
     
     def should_be_proactive(self, context: ProactiveContext) -> bool:
         """
@@ -181,11 +208,22 @@ class ProactivePolicy:
             ProactiveAction.CHECK_IN: 0.9,
             ProactiveAction.RIFF: 0.5,
             ProactiveAction.SILENT: 0.3,
+            ProactiveAction.DISCORD_DM_RANDOM_USER: 0.0,  # Disabled by default
+            ProactiveAction.DISCORD_MESSAGE_CHANNEL: 0.0,  # Disabled by default
         }
+        
+        # Enable Discord actions if configured
+        if self.discord_enabled:
+            utilities[ProactiveAction.DISCORD_DM_RANDOM_USER] = 0.6
+            utilities[ProactiveAction.DISCORD_MESSAGE_CHANNEL] = 0.5
         
         # Adjust based on idle time
         if context.time_since_last_user_msg > 300:  # 5+ minutes
             utilities[ProactiveAction.CHECK_IN] += 0.5
+            # Discord actions are good for long idle times
+            if self.discord_enabled:
+                utilities[ProactiveAction.DISCORD_DM_RANDOM_USER] += 0.3
+                utilities[ProactiveAction.DISCORD_MESSAGE_CHANNEL] += 0.2
         
         # Adjust based on engagement
         if context.recent_engagement > 0.7:
@@ -201,9 +239,13 @@ class ProactivePolicy:
             if mood_state == 'playful':
                 utilities[ProactiveAction.SUGGEST_ACTIVITY] += 0.4
                 utilities[ProactiveAction.RIFF] += 0.3
+                if self.discord_enabled:
+                    utilities[ProactiveAction.DISCORD_MESSAGE_CHANNEL] += 0.3
             elif mood_state == 'curious':
                 utilities[ProactiveAction.ASK_QUESTION] += 0.3
                 utilities[ProactiveAction.SHARE_FACT] += 0.3
+                if self.discord_enabled:
+                    utilities[ProactiveAction.DISCORD_DM_RANDOM_USER] += 0.2
             elif mood_state == 'calm':
                 utilities[ProactiveAction.SILENT] += 0.3
         
@@ -249,7 +291,8 @@ class ProactiveScheduler:
         min_interval: float = 30.0,  # Min seconds between checks
         max_interval: float = 120.0,  # Max seconds between checks
         max_per_hour: int = 20,
-        enabled: bool = True
+        enabled: bool = True,
+        discord_service: Optional[Any] = None
     ):
         self.bus = bus
         self.policy = policy
@@ -257,6 +300,7 @@ class ProactiveScheduler:
         self.max_interval = max_interval
         self.max_per_hour = max_per_hour
         self.enabled = enabled
+        self.discord_service = discord_service
         
         self._task: Optional[asyncio.Task] = None
         self._last_user_msg_time: float = time.time()
@@ -266,12 +310,70 @@ class ProactiveScheduler:
         self._recent_engagement: float = 0.5
         self._interaction_count: int = 0
         
+        # Discord proactive settings
+        self._discord_known_users: List[str] = []  # List of user targets (IDs or @names)
+        self._discord_known_channels: List[Dict[str, Any]] = []  # List of channel configs {target, guild_id}
+        self._discord_proactive_enabled: bool = False
+        
         # Callback for when proactive action should be taken
         self._on_proactive_callback: Optional[Callable] = None
     
     def set_callback(self, callback: Callable):
         """Set callback to be called when proactive action is triggered."""
         self._on_proactive_callback = callback
+    
+    def set_discord_service(self, discord_service: Any):
+        """Set the Discord service for proactive messaging."""
+        self.discord_service = discord_service
+    
+    def set_discord_proactive_enabled(self, enabled: bool):
+        """Enable or disable Discord proactive messaging."""
+        self._discord_proactive_enabled = enabled
+    
+    def add_discord_known_user(self, user_target: str):
+        """Add a user to the known users list for proactive DMs."""
+        if user_target not in self._discord_known_users:
+            self._discord_known_users.append(user_target)
+    
+    def remove_discord_known_user(self, user_target: str):
+        """Remove a user from the known users list."""
+        if user_target in self._discord_known_users:
+            self._discord_known_users.remove(user_target)
+    
+    def add_discord_known_channel(self, channel_target: str, guild_id: Optional[int] = None):
+        """Add a channel to the known channels list for proactive messages."""
+        channel_config = {"target": channel_target, "guild_id": guild_id}
+        # Check if this channel config already exists
+        if not any(c["target"] == channel_target and c.get("guild_id") == guild_id 
+                   for c in self._discord_known_channels):
+            self._discord_known_channels.append(channel_config)
+    
+    def remove_discord_known_channel(self, channel_target: str, guild_id: Optional[int] = None):
+        """Remove a channel from the known channels list."""
+        self._discord_known_channels = [
+            c for c in self._discord_known_channels 
+            if not (c["target"] == channel_target and c.get("guild_id") == guild_id)
+        ]
+    
+    def get_discord_known_users(self) -> List[str]:
+        """Get list of known users for proactive DMs."""
+        return self._discord_known_users.copy()
+    
+    def get_discord_known_channels(self) -> List[Dict[str, Any]]:
+        """Get list of known channels for proactive messages."""
+        return self._discord_known_channels.copy()
+    
+    def get_random_discord_user(self) -> Optional[str]:
+        """Get a random user from the known users list."""
+        if not self._discord_known_users:
+            return None
+        return random.choice(self._discord_known_users)
+    
+    def get_random_discord_channel(self) -> Optional[Dict[str, Any]]:
+        """Get a random channel from the known channels list."""
+        if not self._discord_known_channels:
+            return None
+        return random.choice(self._discord_known_channels)
     
     async def start(self):
         """Start the proactive scheduler."""
@@ -388,7 +490,15 @@ class ProactiveScheduler:
         # Get intent based on action
         intent = self._get_intent_for_action(action)
         
-        # Publish event
+        # Handle Discord actions directly
+        if action == ProactiveAction.DISCORD_DM_RANDOM_USER:
+            await self._handle_discord_dm(intent)
+            return
+        elif action == ProactiveAction.DISCORD_MESSAGE_CHANNEL:
+            await self._handle_discord_channel_message(intent)
+            return
+        
+        # Publish event for non-Discord actions
         await self.bus.publish("proactive.trigger", {
             "action": action.value,
             "intent": intent,
@@ -421,5 +531,76 @@ class ProactiveScheduler:
             return IntentTemplate.get_riff()
         elif action == ProactiveAction.TELL_STORY:
             return "Let me tell you a quick story..."
+        elif action == ProactiveAction.DISCORD_DM_RANDOM_USER:
+            return IntentTemplate.get_discord_dm_greeting()
+        elif action == ProactiveAction.DISCORD_MESSAGE_CHANNEL:
+            return IntentTemplate.get_discord_channel_message()
         else:
             return IntentTemplate.get_question()
+    
+    async def _handle_discord_dm(self, message: str):
+        """Handle sending a proactive DM to a random known user."""
+        if not self.discord_service or not self._discord_proactive_enabled:
+            await self.bus.publish("proactive.discord_disabled", {
+                "action": "dm",
+                "reason": "Discord service not configured or proactive Discord disabled"
+            })
+            return
+        
+        # Get random user
+        user_target = self.get_random_discord_user()
+        if not user_target:
+            await self.bus.publish("proactive.discord_no_targets", {
+                "action": "dm",
+                "reason": "No known users configured for proactive DMs"
+            })
+            return
+        
+        try:
+            await self.discord_service.send_dm_target(user_target, message)
+            await self.bus.publish("proactive.discord_sent", {
+                "action": "dm",
+                "target": user_target,
+                "message": message
+            })
+        except Exception as e:
+            await self.bus.publish("proactive.discord_error", {
+                "action": "dm",
+                "target": user_target,
+                "error": str(e)
+            })
+    
+    async def _handle_discord_channel_message(self, message: str):
+        """Handle sending a proactive message to a random known channel."""
+        if not self.discord_service or not self._discord_proactive_enabled:
+            await self.bus.publish("proactive.discord_disabled", {
+                "action": "channel",
+                "reason": "Discord service not configured or proactive Discord disabled"
+            })
+            return
+        
+        # Get random channel
+        channel_config = self.get_random_discord_channel()
+        if not channel_config:
+            await self.bus.publish("proactive.discord_no_targets", {
+                "action": "channel",
+                "reason": "No known channels configured for proactive messages"
+            })
+            return
+        
+        try:
+            channel_target = channel_config["target"]
+            guild_id = channel_config.get("guild_id")
+            await self.discord_service.send_channel_target(channel_target, message, guild_id=guild_id)
+            await self.bus.publish("proactive.discord_sent", {
+                "action": "channel",
+                "target": channel_target,
+                "guild_id": guild_id,
+                "message": message
+            })
+        except Exception as e:
+            await self.bus.publish("proactive.discord_error", {
+                "action": "channel",
+                "target": channel_config.get("target"),
+                "error": str(e)
+            })

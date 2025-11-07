@@ -253,6 +253,37 @@ class MainAgentSmol:
                 "description": discord_tool.description
             })
             
+            # Integrate Discord with proactive scheduler
+            self.proactive_scheduler.set_discord_service(discord_service)
+            
+            # Load Discord proactive settings from store
+            discord_proactive_enabled = self.store.get_setting("discord_proactive_enabled", "0") == "1"
+            self.proactive_scheduler.set_discord_proactive_enabled(discord_proactive_enabled)
+            
+            # Load known users list
+            known_users_str = self.store.get_setting("discord_known_users", "")
+            if known_users_str:
+                for user in known_users_str.split(","):
+                    user = user.strip()
+                    if user:
+                        self.proactive_scheduler.add_discord_known_user(user)
+            
+            # Load known channels list
+            known_channels_str = self.store.get_setting("discord_known_channels", "")
+            if known_channels_str:
+                for channel_entry in known_channels_str.split(";"):
+                    channel_entry = channel_entry.strip()
+                    if channel_entry:
+                        parts = channel_entry.split("|")
+                        channel_target = parts[0]
+                        guild_id = int(parts[1]) if len(parts) > 1 and parts[1] else None
+                        self.proactive_scheduler.add_discord_known_channel(channel_target, guild_id)
+            
+            # Enable Discord actions in policy if configured
+            if discord_proactive_enabled and (self.proactive_scheduler.get_discord_known_users() or 
+                                              self.proactive_scheduler.get_discord_known_channels()):
+                self.proactive_scheduler.policy.discord_enabled = True
+            
             print("Discord tool added successfully")
             return True
         except Exception as e:
@@ -528,6 +559,65 @@ Generate a brief, natural message to the user. Keep it short and conversational.
         """Enable or disable proactive behavior."""
         self.proactive_scheduler.enabled = enabled
         self.store.set_setting("proactive_enabled", "1" if enabled else "0")
+    
+    def set_discord_proactive_enabled(self, enabled: bool):
+        """Enable or disable Discord proactive messaging."""
+        self.proactive_scheduler.set_discord_proactive_enabled(enabled)
+        self.store.set_setting("discord_proactive_enabled", "1" if enabled else "0")
+        
+        # Enable/disable Discord actions in policy based on whether targets are configured
+        if enabled and (self.proactive_scheduler.get_discord_known_users() or 
+                       self.proactive_scheduler.get_discord_known_channels()):
+            self.proactive_scheduler.policy.discord_enabled = True
+        else:
+            self.proactive_scheduler.policy.discord_enabled = False
+    
+    def add_discord_proactive_user(self, user_target: str):
+        """Add a user to the Discord proactive DM list."""
+        self.proactive_scheduler.add_discord_known_user(user_target)
+        # Save to store
+        users = self.proactive_scheduler.get_discord_known_users()
+        self.store.set_setting("discord_known_users", ",".join(users))
+        
+        # Enable Discord actions if proactive is enabled
+        if self.proactive_scheduler._discord_proactive_enabled:
+            self.proactive_scheduler.policy.discord_enabled = True
+    
+    def remove_discord_proactive_user(self, user_target: str):
+        """Remove a user from the Discord proactive DM list."""
+        self.proactive_scheduler.remove_discord_known_user(user_target)
+        # Save to store
+        users = self.proactive_scheduler.get_discord_known_users()
+        self.store.set_setting("discord_known_users", ",".join(users))
+    
+    def add_discord_proactive_channel(self, channel_target: str, guild_id: Optional[int] = None):
+        """Add a channel to the Discord proactive message list."""
+        self.proactive_scheduler.add_discord_known_channel(channel_target, guild_id)
+        # Save to store
+        channels = self.proactive_scheduler.get_discord_known_channels()
+        channel_strs = [f"{c['target']}|{c.get('guild_id') or ''}" for c in channels]
+        self.store.set_setting("discord_known_channels", ";".join(channel_strs))
+        
+        # Enable Discord actions if proactive is enabled
+        if self.proactive_scheduler._discord_proactive_enabled:
+            self.proactive_scheduler.policy.discord_enabled = True
+    
+    def remove_discord_proactive_channel(self, channel_target: str, guild_id: Optional[int] = None):
+        """Remove a channel from the Discord proactive message list."""
+        self.proactive_scheduler.remove_discord_known_channel(channel_target, guild_id)
+        # Save to store
+        channels = self.proactive_scheduler.get_discord_known_channels()
+        channel_strs = [f"{c['target']}|{c.get('guild_id') or ''}" for c in channels]
+        self.store.set_setting("discord_known_channels", ";".join(channel_strs))
+    
+    def get_discord_proactive_state(self) -> Dict[str, Any]:
+        """Get current Discord proactive configuration."""
+        return {
+            "enabled": self.proactive_scheduler._discord_proactive_enabled,
+            "known_users": self.proactive_scheduler.get_discord_known_users(),
+            "known_channels": self.proactive_scheduler.get_discord_known_channels(),
+            "policy_enabled": self.proactive_scheduler.policy.discord_enabled,
+        }
     
     async def handle_external_message(
         self,
