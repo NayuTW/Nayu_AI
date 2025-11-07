@@ -276,7 +276,13 @@ class MainAgentSmol:
                     if channel_entry:
                         parts = channel_entry.split("|")
                         channel_target = parts[0]
-                        guild_id = int(parts[1]) if len(parts) > 1 and parts[1] else None
+                        guild_id = None
+                        if len(parts) > 1 and parts[1]:
+                            try:
+                                guild_id = int(parts[1])
+                            except ValueError:
+                                print(f"Warning: Invalid guild_id in stored channel config: {parts[1]}")
+                                continue
                         self.proactive_scheduler.add_discord_known_channel(channel_target, guild_id)
             
             # Enable Discord actions in policy if configured

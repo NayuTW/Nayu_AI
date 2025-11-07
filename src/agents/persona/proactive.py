@@ -344,16 +344,26 @@ class ProactiveScheduler:
         """Add a channel to the known channels list for proactive messages."""
         channel_config = {"target": channel_target, "guild_id": guild_id}
         # Check if this channel config already exists
-        if not any(c["target"] == channel_target and c.get("guild_id") == guild_id 
-                   for c in self._discord_known_channels):
+        if not self._channel_exists(channel_target, guild_id):
             self._discord_known_channels.append(channel_config)
     
     def remove_discord_known_channel(self, channel_target: str, guild_id: Optional[int] = None):
         """Remove a channel from the known channels list."""
         self._discord_known_channels = [
             c for c in self._discord_known_channels 
-            if not (c["target"] == channel_target and c.get("guild_id") == guild_id)
+            if not self._channel_matches(c, channel_target, guild_id)
         ]
+    
+    def _channel_exists(self, channel_target: str, guild_id: Optional[int]) -> bool:
+        """Check if a channel configuration already exists."""
+        return any(
+            c["target"] == channel_target and c.get("guild_id") == guild_id 
+            for c in self._discord_known_channels
+        )
+    
+    def _channel_matches(self, channel_config: Dict[str, Any], target: str, guild_id: Optional[int]) -> bool:
+        """Check if a channel config matches the given target and guild_id."""
+        return channel_config["target"] == target and channel_config.get("guild_id") == guild_id
     
     def get_discord_known_users(self) -> List[str]:
         """Get list of known users for proactive DMs."""

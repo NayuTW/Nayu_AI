@@ -295,7 +295,13 @@ async def main():
                     parts = user.strip()[20:].strip().split()
                     if parts:
                         channel_target = parts[0]
-                        guild_id = int(parts[1]) if len(parts) > 1 else None
+                        guild_id = None
+                        if len(parts) > 1 and parts[1]:
+                            try:
+                                guild_id = int(parts[1])
+                            except ValueError:
+                                print(f"Error: Invalid guild ID '{parts[1]}'. Must be a number.")
+                                continue
                         agent.add_discord_proactive_channel(channel_target, guild_id)
                         print(f"Added channel '{channel_target}' to Discord proactive list.")
                     else:
@@ -306,7 +312,13 @@ async def main():
                     parts = user.strip()[19:].strip().split()
                     if parts:
                         channel_target = parts[0]
-                        guild_id = int(parts[1]) if len(parts) > 1 else None
+                        guild_id = None
+                        if len(parts) > 1 and parts[1]:
+                            try:
+                                guild_id = int(parts[1])
+                            except ValueError:
+                                print(f"Error: Invalid guild ID '{parts[1]}'. Must be a number.")
+                                continue
                         agent.remove_discord_proactive_channel(channel_target, guild_id)
                         print(f"Removed channel '{channel_target}' from Discord proactive list.")
                     else:
