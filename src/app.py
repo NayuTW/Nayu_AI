@@ -10,10 +10,12 @@ import os
 import logging
 
 from src.agents.state import SharedState
-from src.agents.core.events import EventBus
+from src.agents.core.events import EventBus, InterruptPriority
 from src.agents.core.registry import ToolRegistry
 from src.agents.core.health import HealthChecker
 from src.agents.core.store import SQLiteStore
+from src.agents.core.interrupt_manager import InterruptManager
+from src.agents.core.continuous_runner import ContinuousAgentRunner
 from src.agents.notify.notifier import Notifier
 from src.agents.notify.error_speaker import ErrorSpeaker
 from src.agents.tools.speech_smol import SpeechSmolTool
@@ -115,6 +117,18 @@ async def main():
         interval_s=10
     )
     await error_speaker.start()
+    
+    # Initialize interrupt manager
+    interrupt_manager = InterruptManager(bus=bus)
+    await interrupt_manager.start()
+    
+    # Initialize continuous agent runner
+    continuous_runner = ContinuousAgentRunner(
+        agent=agent,
+        bus=bus,
+        interrupt_manager=interrupt_manager
+    )
+    await continuous_runner.start()
 
     # Start periodic database flush task
     async def periodic_flush():
@@ -166,58 +180,119 @@ async def main():
     print("  'voice off'      - Disable voice notifications")
     print("  '/reset-session' - Clear conversation history")
     print("  '/sessions'      - List all sessions")
+    print("  '/state'         - Show agent state")
     print("  'quit'           - Exit the application")
     print("=" * 60)
     print()
+    print("Agent running continuously. Type your message and press Enter.")
+    print()
     
+    # Non-blocking input loop using continuous runner
     try:
-        while True:
-            try:
-                user = await asyncio.to_thread(input, "You: ")
-            except EOFError:
-                break
-            
-            if user.strip().lower() == "quit":
-                break
-            
-            if user.strip().lower() == "voice on":
-                notifier.set_voice(True)
-                store.set_setting("voice_enabled", "1")
-                print("Voice enabled.")
-                continue
-            
-            if user.strip().lower() == "voice off":
-                notifier.set_voice(False)
-                store.set_setting("voice_enabled", "0")
-                print("Voice disabled.")
-                continue
-            
-            # Handle session commands
-            if user.strip().lower() == "/reset-session":
-                agent.reset_session()
-                print(f"Session {session_id} has been reset. Conversation history cleared.")
-                continue
-            
-            if user.strip().lower() == "/sessions":
-                sessions = agent.list_sessions()
-                if sessions:
-                    print(f"Available sessions ({len(sessions)}):")
-                    for s in sessions:
-                        current = " (current)" if s == session_id else ""
-                        print(f"  - {s}{current}")
-                else:
-                    print("No saved sessions found.")
-                continue
-            
-            # Process user message
-            resp = await agent.handle_user_message(
-                user,
-                source="cli",
-                external_metadata={"tag": "cli"}
-            )
-            print(f"Agent: {resp}")
+        async def input_loop():
+            """Non-blocking input loop that queues messages."""
+            while True:
+                try:
+                    user = await asyncio.to_thread(input, "You: ")
+                except EOFError:
+                    break
+                
+                if user.strip().lower() == "quit":
+                    await interrupt_manager.signal_stop()
+                    break
+                
+                if user.strip().lower() == "voice on":
+                    notifier.set_voice(True)
+                    store.set_setting("voice_enabled", "1")
+                    print("Voice enabled.")
+                    continue
+                
+                if user.strip().lower() == "voice off":
+                    notifier.set_voice(False)
+                    store.set_setting("voice_enabled", "0")
+                    print("Voice disabled.")
+                    continue
+                
+                # Handle session commands
+                if user.strip().lower() == "/reset-session":
+                    agent.reset_session()
+                    print(f"Session {session_id} has been reset. Conversation history cleared.")
+                    continue
+                
+                if user.strip().lower() == "/sessions":
+                    sessions = agent.list_sessions()
+                    if sessions:
+                        print(f"Available sessions ({len(sessions)}):")
+                        for s in sessions:
+                            current = " (current)" if s == session_id else ""
+                            print(f"  - {s}{current}")
+                    else:
+                        print("No saved sessions found.")
+                    continue
+                
+                if user.strip().lower() == "/state":
+                    state_info = continuous_runner.get_state_info()
+                    print(f"Agent State: {state_info['state']}")
+                    print(f"Attention Depth: {state_info['attention_depth']}")
+                    if state_info.get('current_attention'):
+                        att = state_info['current_attention']
+                        print(f"Current Task: {att.get('primary_task', 'None')}")
+                    continue
+                
+                # Queue user input via interrupt manager
+                await interrupt_manager.signal_user_input(
+                    text=user,
+                    source="cli",
+                    metadata={"session_id": session_id}
+                )
+        
+        # Subscribe to agent output events to display responses
+        event_queue = await bus.subscribe()
+        
+        async def display_responses():
+            """Display agent responses from event bus."""
+            while True:
+                try:
+                    event = await event_queue.get()
+                    
+                    if event.type == "agent.output":
+                        response = event.payload.get("text", "")
+                        print(f"Agent: {response}")
+                    
+                    elif event.type == "agent.thinking":
+                        # Optional: show thinking indicator
+                        pass
+                    
+                    elif event.type == "agent.error":
+                        error = event.payload.get("error", "Unknown error")
+                        print(f"Error: {error}")
+                
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.exception(f"Error in display loop: {e}")
+        
+        # Run both loops concurrently
+        input_task = asyncio.create_task(input_loop())
+        display_task = asyncio.create_task(display_responses())
+        
+        # Wait for input loop to complete (user types 'quit')
+        await input_task
+        
+        # Cancel display task
+        display_task.cancel()
+        try:
+            await display_task
+        except asyncio.CancelledError:
+            pass
     
     finally:
+        # Stop continuous runner
+        await continuous_runner.stop()
+        
+        # Stop interrupt manager
+        await interrupt_manager.stop()
+        
         # Cancel periodic flush task
         if 'flush_task' in locals():
             flush_task.cancel()
