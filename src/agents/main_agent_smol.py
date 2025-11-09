@@ -91,22 +91,25 @@ class MainAgentSmol:
         self.streaming_handler = StreamingResponseHandler(bus=bus)
         self.streaming_enabled = os.getenv("AGENT_STREAMING", "false").lower() == "true"
         
-        # Initialize session manager
+        # Initialize session manager with aggressive trimming for memory efficiency
         self.session_manager = SessionManager(
             session_dir=".nayu_ai/sessions",
-            max_messages=20,
-            max_tokens=4096,
-            summary_interval=5
+            max_messages=10,      # Keep only last 10 messages in active context
+            max_tokens=500,       # Aggressive token limit (~500 tokens active)
+            summary_interval=5,   # Summarize every 5 turns
+            aggressive_trim=True  # Enable aggressive context trimming
         )
         
-        # Initialize LiteLLM model for Ollama
+        # Initialize LiteLLM model for Ollama with KV cache optimization
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
         num_ctx = int(os.getenv("AGENT_NUM_CTX", "10000"))
+        keep_alive = int(os.getenv("AGENT_KEEP_ALIVE", "-1"))  # -1 = keep loaded indefinitely
         
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
             num_ctx=num_ctx,
-            temperature=0.8
+            temperature=0.8,
+            keep_alive=keep_alive  # Enable KV cache by keeping model loaded
         )
         
         # Initialize tools
@@ -252,10 +255,21 @@ class MainAgentSmol:
         # Use provided session_id or fall back to default
         active_session_id = session_id or self.session_id
         
-        # Get session context (summary, working set, recent messages)
-        summary, working_set_context, recent_messages = self.session_manager.get_context(active_session_id)
+        # Use compact context for token efficiency (only last 5-7 messages)
+        use_compact = os.getenv("AGENT_COMPACT_CONTEXT", "true").lower() == "true"
         
-        # Get memory context from memory tool
+        if use_compact:
+            summary, working_set_context, recent_messages = self.session_manager.get_compact_context(
+                active_session_id, 
+                max_messages=7  # Ultra-compact: only last 7 messages
+            )
+        else:
+            summary, working_set_context, recent_messages = self.session_manager.get_context(active_session_id)
+        
+        # Estimate token usage for monitoring
+        estimated_tokens = self.session_manager.estimate_context_tokens(active_session_id)
+        
+        # Get memory context from memory tool (keep minimal)
         try:
             mem_tool = next((t for t in self.tools if t.name == "memory"), None)
             if mem_tool:
@@ -265,19 +279,22 @@ class MainAgentSmol:
         except Exception:
             mem_digest = ""
         
-        # Build context
+        # Build context (from state)
         context = self.state.build_context(mem_digest)
         
-        # Build conversation history for context
+        # Build conversation history for context (use only recent messages)
         conversation_history = ""
         if recent_messages:
             history_lines = []
-            for msg in recent_messages[-10:]:  # Last 10 messages for context
+            # Use all messages from compact context (already limited)
+            for msg in recent_messages:
                 role_label = "User" if msg.role == "user" else "Assistant"
-                history_lines.append(f"{role_label}: {msg.content}")
+                # Truncate very long messages for token efficiency
+                content = msg.content[:500] if len(msg.content) > 500 else msg.content
+                history_lines.append(f"{role_label}: {content}")
             conversation_history = "\n".join(history_lines)
         
-        # Build prompt with full context including session memory
+        # Build prompt with compact context
         full_prompt = f"""{SYSTEM_PROMPT}
 {self.os_context}
 
@@ -310,12 +327,13 @@ Respond naturally and use tools only if needed. You can reference previous messa
             metadata={"source": source, "user_id": user_id, "channel_id": channel_id}
         )
         
-        # Publish input event
+        # Publish input event with token budget info
         await self.bus.publish("agent.input", {
             "text": user_text,
             "source": source,
             "meta": external_metadata or {},
-            "session_id": active_session_id
+            "session_id": active_session_id,
+            "estimated_context_tokens": estimated_tokens
         })
         
         try:
@@ -333,17 +351,18 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 session_id=active_session_id,
                 role="assistant",
                 content=result,
-                metadata={"latency_ms": latency_ms}
+                metadata={"latency_ms": latency_ms, "estimated_tokens": estimated_tokens}
             )
             
             # Persist the interaction for fine-tuning
             await self._persist_example(user_text, result, mem_digest, source, user_id, channel_id)
             
-            # Publish output event
+            # Publish output event with token info
             await self.bus.publish("agent.output", {
                 "text": result,
                 "latency_ms": latency_ms,
-                "session_id": active_session_id
+                "session_id": active_session_id,
+                "estimated_context_tokens": estimated_tokens
             })
             
             return result

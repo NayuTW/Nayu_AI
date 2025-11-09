@@ -93,20 +93,22 @@ class SessionManager:
     def __init__(
         self,
         session_dir: str = ".nayu_ai/sessions",
-        max_messages: int = 20,
-        max_tokens: int = 4096,
+        max_messages: int = 10,  # Reduced from 20 for more aggressive trimming
+        max_tokens: int = 500,   # Reduced from 4096 for lightweight context
         summary_interval: int = 5,
-        max_cache_size: int = 10
+        max_cache_size: int = 10,
+        aggressive_trim: bool = True  # Enable aggressive trimming by default
     ):
         """
         Initialize the session manager.
         
         Args:
             session_dir: Directory to store session files
-            max_messages: Maximum messages to keep in rolling window
-            max_tokens: Approximate token budget for rolling window
+            max_messages: Maximum messages to keep in rolling window (default: 10)
+            max_tokens: Approximate token budget for rolling window (default: 500)
             summary_interval: Generate summary every N turns
             max_cache_size: Maximum sessions to keep in memory cache
+            aggressive_trim: Enable aggressive context trimming for memory efficiency
         """
         self.session_dir = Path(session_dir)
         self.session_dir.mkdir(parents=True, exist_ok=True)
@@ -114,6 +116,7 @@ class SessionManager:
         self.max_messages = max_messages
         self.max_tokens = max_tokens
         self.summary_interval = summary_interval
+        self.aggressive_trim = aggressive_trim
         
         # LRU cache for active sessions
         self._cache: OrderedDict[str, SessionState] = OrderedDict()
@@ -255,16 +258,28 @@ class SessionManager:
         return total_chars // 4
     
     def _truncate_messages(self, state: SessionState):
-        """Truncate messages to stay within token budget and message limit."""
+        """
+        Truncate messages to stay within token budget and message limit.
+        Uses aggressive trimming when enabled for better memory efficiency.
+        """
+        if self.aggressive_trim:
+            # More aggressive: keep only last 5-10 messages
+            target_messages = min(self.max_messages, 10)
+        else:
+            target_messages = self.max_messages
+        
         # Simple truncation: keep last N messages
-        if len(state.messages) > self.max_messages:
-            state.messages = state.messages[-self.max_messages:]
+        if len(state.messages) > target_messages:
+            state.messages = state.messages[-target_messages:]
         
         # Token-based truncation (approximate)
         estimated_tokens = self._estimate_tokens(state.messages)
         
-        while estimated_tokens > self.max_tokens and len(state.messages) > 5:
-            # Keep at least 5 messages
+        # Keep at least 3 messages for context
+        min_messages = 3
+        
+        while estimated_tokens > self.max_tokens and len(state.messages) > min_messages:
+            # Remove oldest message
             removed_msg = state.messages.pop(0)
             # Subtract the removed message's tokens for efficiency
             estimated_tokens -= len(removed_msg.content) // 4
@@ -316,6 +331,54 @@ class SessionManager:
         recent_messages = state.messages
         
         return summary, working_set_context, recent_messages
+    
+    def get_compact_context(
+        self, 
+        session_id: str, 
+        max_messages: Optional[int] = None
+    ) -> Tuple[str, str, List[Message]]:
+        """
+        Get ultra-compact context optimized for token efficiency.
+        
+        This returns only the most recent N messages (default: 5), the summary,
+        and working set. Useful for maintaining low token counts.
+        
+        Args:
+            session_id: The session identifier
+            max_messages: Maximum messages to return (default: 5 for ultra-compact)
+            
+        Returns:
+            Tuple of (summary, working_set_context, recent_messages)
+        """
+        state = self.get_session(session_id)
+        
+        summary = state.summary
+        working_set_context = state.working_set.to_context_string()
+        
+        # Get only the most recent messages
+        limit = max_messages if max_messages is not None else 5
+        recent_messages = state.messages[-limit:] if state.messages else []
+        
+        return summary, working_set_context, recent_messages
+    
+    def estimate_context_tokens(self, session_id: str) -> int:
+        """
+        Estimate the total token count for a session's active context.
+        
+        Args:
+            session_id: The session identifier
+            
+        Returns:
+            Estimated token count
+        """
+        state = self.get_session(session_id)
+        
+        # Estimate tokens: ~4 chars per token
+        message_tokens = self._estimate_tokens(state.messages)
+        summary_tokens = len(state.summary) // 4
+        working_set_tokens = len(state.working_set.to_context_string()) // 4
+        
+        return message_tokens + summary_tokens + working_set_tokens
     
     def update_working_set(
         self,
