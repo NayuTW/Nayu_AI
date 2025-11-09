@@ -79,6 +79,17 @@ src/
 
 ## Development Environment
 
+### Prerequisites
+- **Python**: 3.10+ (3.11 recommended, 3.12 supported)
+- **Ollama**: Must be installed and running locally (not in requirements.txt)
+  - Install from https://ollama.ai/download
+  - Start with `ollama serve`
+  - Pull models: `ollama pull qwen2:7b-instruct-q5_K_M`
+- **GPU**: NVIDIA GPU with 12GB+ VRAM recommended for local LLM inference
+- **RAM**: 32GB recommended for comfortable operation
+- **OS**: Linux preferred (works in VM with GPU passthrough), also supports macOS
+- **espeak**: Required for TTS functionality (system package)
+
 ### Setup
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -158,6 +169,30 @@ Dashboard accessible at:
 
 ## Testing and Validation
 
+### Running Tests
+```bash
+# Run all tests
+python -m pytest test/
+
+# Run specific test file
+python -m pytest test/test_integration_memory.py
+
+# Run with verbose output
+python -m pytest -v test/
+```
+
+### Test Structure
+- Tests are located in the `/test` directory
+- Each test file focuses on a specific component or integration
+- Integration tests may require Ollama to be running locally
+- Use mocks for external dependencies where appropriate
+
+### Writing Tests
+- Follow existing test patterns in the repository
+- Test both success and failure cases
+- Verify tool state changes and event emissions
+- Mock Ollama calls for unit tests to avoid external dependencies
+
 ### Manual Testing
 - Use dashboard's "Test" button for individual tools
 - Monitor live event log for debugging
@@ -227,6 +262,133 @@ summary = self.state.summary()
 - Include tool-calling examples to preserve function calling
 - QLoRA/Unsloth feasible on 12GB VRAM with 7-8B models
 
+## Error Handling
+
+### Tool Error Patterns
+All tools should follow this error handling pattern:
+
+```python
+try:
+    # Tool operation
+    result = perform_operation()
+    self.bus.emit("tool_call", {
+        "name": self.name,
+        "status": "success",
+        "result": result
+    })
+    return {"status": "success", "data": result}
+except Exception as e:
+    self.bus.emit("tool_call", {
+        "name": self.name,
+        "status": "error",
+        "error": str(e)
+    })
+    return {"status": "error", "error": str(e)}
+```
+
+### Circuit Breaker
+- Tools automatically disable after repeated failures (default: 3 failures)
+- Check `tool_metrics` table for failure counts
+- Use dashboard to manually reset circuit breakers
+- Implement proper error recovery before re-enabling failed tools
+
+### Voice Notifications
+- Critical errors trigger TTS notifications if enabled
+- Configure via `TTS_REF_AUDIO` and `TTS_REF_TEXT` environment variables
+- Toggle speak-on-error in dashboard settings
+
+## Contributing Workflow
+
+### Making Changes
+1. **Understand the scope**: Read relevant documentation and code
+2. **Make minimal changes**: Only modify what's necessary
+3. **Test locally**: Verify changes work as expected
+4. **Check dashboard**: Ensure UI reflects changes correctly
+5. **Run existing tests**: Ensure no regressions
+6. **Update documentation**: Keep docs in sync with code
+
+### Code Review Checklist
+- [ ] Changes are minimal and focused
+- [ ] Tool interfaces remain compatible
+- [ ] Async patterns used for I/O operations
+- [ ] Error handling follows project patterns
+- [ ] Events emitted for important state changes
+- [ ] Dashboard updated if tool behavior changes
+- [ ] Documentation updated if interfaces change
+- [ ] Security guardrails maintained
+
+## Troubleshooting
+
+### Common Issues
+
+**Ollama Connection Errors**
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Start Ollama service
+ollama serve
+
+# Check model availability
+ollama list
+```
+
+**Playwright Browser Issues**
+```bash
+# Reinstall Chromium
+playwright install chromium
+
+# Check Playwright installation
+python -c "import playwright; print('OK')"
+```
+
+**Dashboard Not Accessible**
+- Check firewall rules allow port 8008
+- Verify `AGENT_DASH_HOST=0.0.0.0` for VM access
+- Use `make run-local` for localhost-only binding
+- Check dashboard logs for startup errors
+
+**Tool Disabled/Circuit Breaker**
+- Check dashboard health status for tool state
+- Review event log for failure patterns
+- Reset circuit breaker via dashboard
+- Fix underlying issue before re-enabling
+
+**Memory/ChromaDB Issues**
+```bash
+# Reset vector database
+rm -rf .chroma
+
+# Verify embeddings model
+python -c "from fastembed import TextEmbedding; print('OK')"
+```
+
+**TTS Not Working**
+- Verify espeak is installed: `which espeak`
+- Check reference audio configuration
+- Ensure audio file paths are absolute
+- Review TTS setup documentation: `docs/TTS_SETUP.md`
+
+### Performance Issues
+
+**High Memory Usage**
+- Reduce Ollama context window (num_ctx parameter)
+- Use smaller embedding model
+- Limit concurrent tool executions
+- Monitor ChromaDB index size
+
+**Slow Tool Response**
+- Check network latency to Ollama
+- Profile slow operations in tool code
+- Consider caching for repeated operations
+- Review dashboard metrics for bottlenecks
+
+**GPU Memory Exhaustion**
+- Use more aggressively quantized models (Q4 vs Q5)
+- Reduce batch size for embeddings
+- Unload unused models from Ollama
+- Monitor VRAM with `nvidia-smi`
+
 ## When Suggesting Changes
 
 1. **Minimize modifications**: Make surgical changes to existing code
@@ -237,3 +399,5 @@ summary = self.state.summary()
 6. **Async patterns**: Use async/await for I/O operations
 7. **Error handling**: Tools should fail gracefully and emit events
 8. **Dashboard integration**: Consider UI impacts for user-facing changes
+9. **Run tests**: Verify no regressions with existing test suite
+10. **Check dependencies**: Avoid adding new dependencies unless necessary
