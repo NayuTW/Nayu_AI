@@ -250,12 +250,33 @@ async def main():
         event_queue = await bus.subscribe()
         
         async def display_responses():
-            """Display agent responses from event bus."""
+            """Display agent responses from event bus with streaming support."""
+            current_line_buffer = []
+            
             while True:
                 try:
                     event = await event_queue.get()
                     
-                    if event.type == "agent.output":
+                    if event.type == "stream.chunk":
+                        # Display streaming chunk
+                        content = event.payload.get("content", "")
+                        print(content, end="", flush=True)
+                        current_line_buffer.append(content)
+                    
+                    elif event.type == "stream.complete":
+                        # Finalize streamed response
+                        if current_line_buffer:
+                            print()  # Newline after stream
+                            current_line_buffer.clear()
+                    
+                    elif event.type == "stream.interrupted":
+                        # Show interruption
+                        if current_line_buffer:
+                            print(" [interrupted]")
+                            current_line_buffer.clear()
+                    
+                    elif event.type == "agent.output":
+                        # Non-streaming response (fallback)
                         response = event.payload.get("text", "")
                         print(f"Agent: {response}")
                     

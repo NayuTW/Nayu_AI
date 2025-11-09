@@ -5,7 +5,7 @@ This replaces the custom LLM-based orchestrator with smolagents' built-in CodeAg
 import asyncio
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, AsyncIterator
 
 from smolagents import CodeAgent
 
@@ -13,6 +13,7 @@ from src.agents.state import SharedState
 from src.agents.llm.litellm_model import OllamaLiteLLMModel
 from src.agents.core.events import EventBus
 from src.agents.core.registry import ToolRegistry
+from src.agents.core.streaming_handler import StreamingResponseHandler
 from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
 
@@ -85,6 +86,10 @@ class MainAgentSmol:
         self.store = store
         self.session_id = session_id
         self.os_context = ""  # Will be populated when desktop tool is initialized
+        
+        # Initialize streaming handler
+        self.streaming_handler = StreamingResponseHandler(bus=bus)
+        self.streaming_enabled = os.getenv("AGENT_STREAMING", "false").lower() == "true"
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -451,3 +456,94 @@ Respond naturally and use tools only if needed. You can reference previous messa
             artifacts=artifacts,
             env_context=env_context
         )
+    
+    async def _stream_response_chars(self, text: str, source: str, session_id: str) -> AsyncIterator[str]:
+        """
+        Stream response character by character with interrupt checking.
+        
+        This provides a simple streaming experience that allows interruption
+        during response generation. For true token-by-token streaming, the
+        underlying LLM client would need to support it.
+        
+        Args:
+            text: Complete response text
+            source: Source of the request
+            session_id: Session ID
+            
+        Yields:
+            Character chunks
+        """
+        # Group characters into small chunks for better display
+        chunk_size = 5
+        
+        for i in range(0, len(text), chunk_size):
+            # Check for interrupts
+            if self.bus.has_interrupt():
+                # Yield remaining text and mark as interrupted
+                remaining = text[i:]
+                if remaining:
+                    yield remaining
+                break
+            
+            chunk = text[i:i+chunk_size]
+            yield chunk
+            
+            # Small delay for natural typing effect
+            await asyncio.sleep(0.02)
+    
+    async def handle_user_message_streaming(
+        self,
+        user_text: str,
+        source: str = "cli",
+        external_metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
+        channel_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> str:
+        """
+        Handle a user message with streaming response support.
+        
+        This method first generates the complete response using the CodeAgent,
+        then streams it character-by-character with interrupt support.
+        
+        For true token streaming, the underlying model would need to support it,
+        which would require changes to smolagents CodeAgent or using a custom
+        implementation.
+        
+        Args:
+            user_text: User message
+            source: Source of the message
+            external_metadata: Additional metadata
+            user_id: User ID (for Discord/multi-user)
+            channel_id: Channel ID (for Discord)
+            session_id: Session ID (optional)
+            
+        Returns:
+            Complete response text (even if interrupted)
+        """
+        # First, generate the response normally
+        # (In a future version, this could be done with true streaming)
+        full_response = await self.handle_user_message(
+            user_text=user_text,
+            source=source,
+            external_metadata=external_metadata,
+            user_id=user_id,
+            channel_id=channel_id,
+            session_id=session_id
+        )
+        
+        # Now stream it with interrupt support
+        if self.streaming_enabled:
+            active_session = session_id or self.session_id
+            
+            # Create async generator for the response
+            generator = self._stream_response_chars(full_response, source, active_session)
+            
+            # Stream through handler
+            await self.streaming_handler.stream_response(
+                generator=generator,
+                source=source,
+                session_id=active_session
+            )
+        
+        return full_response
