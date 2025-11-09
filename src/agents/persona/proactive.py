@@ -289,8 +289,8 @@ class ProactiveScheduler:
         bus: EventBus,
         policy: ProactivePolicy,
         min_interval: float = 30.0,  # Min seconds between checks
-        max_interval: float = 120.0,  # Max seconds between checks
-        max_per_hour: int = 20,
+        max_interval: float = 90.0,  # Max seconds between checks
+        max_per_hour: int = 30,
         enabled: bool = True,
         discord_service: Optional[Any] = None
     ):

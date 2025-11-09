@@ -121,7 +121,7 @@ class MainAgentSmol:
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
-        num_ctx = int(os.getenv("AGENT_NUM_CTX", "24576"))
+        num_ctx = int(os.getenv("AGENT_NUM_CTX", "10000"))
         
         # Adjust temperature based on persona creativity
         base_temp = float(os.getenv("AGENT_TEMPERATURE", "0.8"))
