@@ -7,6 +7,7 @@ pillow>=10.0
 mss>=9.0
 pyautogui>=0.9.54
 
+requests>=2.31.0
 duckduckgo-search>=5.3
 readability-lxml>=0.8.1
 html2text>=2020.1.16
@@ -29,6 +30,8 @@ smolagents>=0.0.18
 litellm>=1.0
 
 # NeuTTS-Air TTS dependencies
+neuttsair>=0.1.0
+torch>=2.0.0
 librosa>=0.11.0
 neucodec>=0.0.4
 phonemizer>=3.3.0

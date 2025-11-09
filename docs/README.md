@@ -1,11 +1,11 @@
 # Local Multi‑Agent Orchestrator (Fully Offline, Dashboard + Curation)
 
 A fully local, Python multi‑agent system designed to run on a single GPU (12GB VRAM) and 32GB RAM, with:
-- Main orchestrator LLM (Ollama) using structured tool/function calling
-- Sub‑agents as tools (web, desktop, vision, speech, memory, code execution)
-- CodeAgent with guardrails (import allowlist, file/network controls, step/output caps)
-- Markdown Browser sub‑agent with embedded ranking (small local embedding model) for token‑efficient web research
-- Memory with local embeddings (Chroma + e5/bge/MiniLM)
+- Main orchestrator using smolagents CodeAgent with Ollama LLM backend for structured tool/function calling
+- Sub‑agents as smolagents-compatible tools (web, desktop, vision, speech, memory, code execution)
+- Nested CodeAgent for sandboxed code execution with guardrails (import allowlist, file/network controls, step/output caps)
+- Markdown Browser sub‑agent with embedding-based ranking (local embedding model) for token‑efficient web research
+- Memory with local embeddings (Chroma + fastembed/sentence-transformers)
 - Dashboard (FastAPI + HTMX) for live control: toggle tools, health, logs, testing, settings
 - Discord integration for reading and responding to messages in guilds and DMs
 - Persistent SQLite store for events, tool metrics, user settings, and fine‑tune dataset curation
@@ -97,15 +97,15 @@ virsh net-dhcp-leases default
 
 ## Features
 
-- Orchestrator with structured tool calls and a shared “blackboard” state for awareness
-- Sub‑agents:
-  - Web: Playwright‑based browser actions
-  - Desktop: keyboard/mouse + screenshots
-  - Vision: VLM for screenshots/OCR
-  - Speech: local STT/TTS
-  - Memory: Chroma vector store, local embeddings
-  - Code execution: smolagents CodeAgent, wrapped as a tool, with guardrails
-  - Markdown Browser: search/fetch/browse → Markdown with citations and embedding‑based ranking
+- Main orchestrator built on smolagents CodeAgent with structured tool calls and a shared “blackboard” state for awareness
+- Sub‑agents (smolagents-compatible tools):
+  - Web: Playwright‑based browser automation and Selenium fallback
+  - Desktop: keyboard/mouse control + screenshots with OS-aware shortcuts
+  - Vision: Ollama VLM for image analysis and OCR
+  - Speech: local STT with faster-whisper and TTS with NeuTTS-Air voice cloning
+  - Memory: Chroma vector store with local embeddings (fastembed/sentence-transformers)
+  - Code execution: nested smolagents CodeAgent with guardrails
+  - Markdown Browser: DuckDuckGo search/fetch/browse → Markdown with citations and embedding‑based ranking
 - Guardrails for CodeAgent child process:
   - Import allowlist
   - File IO disabled by default (optional read‑only jail)
