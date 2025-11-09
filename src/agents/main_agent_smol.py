@@ -68,7 +68,7 @@ INTERACTION APPROACH:
 - Only use tools when the user's request specifically requires them
 - Think: "Can I answer this directly, or do I need a tool?"
 - Always provide your final response by calling the 'final_answer' function"""
-    
+
     return f"{persona_prompt}{mood_context}\n{base_instructions}"
 
 
