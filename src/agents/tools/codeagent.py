@@ -7,7 +7,7 @@ import sys
 
 from smolagents import CodeAgent, Tool
 
-from src.agents.llm.smol_ollama_model import SmolOllamaModel
+from src.agents.llm.litellm_model import OllamaLiteLLMModel
 from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
 from src.agents.sandbox.guardrails import GuardedEnv
 
@@ -51,7 +51,7 @@ class CodeAgentTool:
         self,
         state,
         allowed_tools: Optional[List[Tool]] = None,
-        model: Optional[SmolOllamaModel] = None,
+        model: Optional[OllamaLiteLLMModel] = None,
         max_steps: int = 12,
         system_prompt: Optional[str] = None,
         allowed_imports: Optional[List[str]] = None,
@@ -65,7 +65,7 @@ class CodeAgentTool:
         mem_limit_mb: Optional[int] = None,
     ):
         self.state = state
-        self.model = model or SmolOllamaModel()
+        self.model = model or OllamaLiteLLMModel()
         self.allowed_tools = allowed_tools or [
             WebBrowserSmolTool(),
             GetUrlTool(),

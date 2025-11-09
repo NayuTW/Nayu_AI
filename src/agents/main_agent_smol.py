@@ -96,7 +96,7 @@ class MainAgentSmol:
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
-        num_ctx = int(os.getenv("AGENT_NUM_CTX", "8000"))
+        num_ctx = int(os.getenv("AGENT_NUM_CTX", "10000"))
         
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
