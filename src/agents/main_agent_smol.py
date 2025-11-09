@@ -60,7 +60,7 @@ RESPONSE STYLE:
 - Don't mention internal details like tool execution unless relevant
 - Provide helpful, actionable information
 - Keep responses concise but complete
-- Always provide your final response by calling the 'final_answer' function"""
+- You can shall only provide your final response to the user by using the final_answer function, which will output its contents to the user."""
 
 
 class MainAgentSmol:
@@ -96,7 +96,7 @@ class MainAgentSmol:
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
-        num_ctx = int(os.getenv("AGENT_NUM_CTX", "24576"))
+        num_ctx = int(os.getenv("AGENT_NUM_CTX", "8000"))
         
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
