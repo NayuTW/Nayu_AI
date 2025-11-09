@@ -70,12 +70,6 @@ INTERACTION APPROACH:
 - Always provide your final response by calling the 'final_answer' function"""
 
     return f"{persona_prompt}{mood_context}\n{base_instructions}"
-RESPONSE STYLE:
-- Be direct and conversational
-- Don't mention internal details like tool execution unless relevant
-- Provide helpful, actionable information
-- Keep responses concise but complete
-- You can shall only provide your final response to the user by using the final_answer function, which will output its contents to the user."""
 
 
 class MainAgentSmol:
