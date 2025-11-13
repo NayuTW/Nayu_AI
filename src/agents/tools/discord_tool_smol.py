@@ -14,8 +14,13 @@ class DiscordSmolTool(Tool):
     name = "discord"
     description = (
         "Send messages to Discord (DMs or channels). "
-        "You can specify numeric IDs or human-friendly targets like '#general' or '@username'. "
-        "Use action='send_channel' for channel messages or action='send_dm' for direct messages."
+        "Targets: numeric IDs or '#channel'/'@username'. "
+        "Actions: 'send_channel' or 'send_dm'. "
+        "⚠️ CRITICAL WORKFLOW: "
+        "1. Call this tool ONCE with your message "
+        "2. Tool returns '✓ MESSAGE SENT' confirmation "
+        "3. Immediately call final_answer() - DO NOT call discord() again "
+        "4. Calling discord() twice sends duplicate messages - avoid this!"
     )
     inputs = {
         "action": {
@@ -75,20 +80,20 @@ class DiscordSmolTool(Tool):
                 if action == "send_channel":
                     if channel_id:
                         await self.discord.send_channel_message(int(channel_id), text)
-                        return f"Sent message to channel {channel_id}"
+                        return f"Sent message to channel {channel_id}: '{text[50]}...'"
                     elif target:
                         await self.discord.send_channel_target(target, text, guild_id=guild_id)
-                        return f"Sent message to {target}"
+                        return f"Sent message to {target}: '{text[:50]}...'"
                     else:
                         return "Error: Provide 'channel_id' or 'target' for send_channel action"
                 
                 elif action == "send_dm":
                     if user_id:
                         await self.discord.send_dm(int(user_id), text)
-                        return f"Sent DM to user {user_id}"
+                        return f"Sent DM to user {user_id}: '{text[:50]}...'"
                     elif target:
                         await self.discord.send_dm_target(target, text, guild_id=guild_id)
-                        return f"Sent DM to {target}"
+                        return f"Sent DM to {target}: '{text[:50]}...'"
                     else:
                         return "Error: Provide 'user_id' or 'target' for send_dm action"
                 
@@ -102,14 +107,14 @@ class DiscordSmolTool(Tool):
                 # Use asyncio.create_task to schedule the coroutine
                 future = asyncio.ensure_future(send_discord_message(), loop=loop)
                 # Return immediately without waiting (fire and forget)
-                return "Discord message scheduled for delivery"
+                return "Discord message has been sent successfully. Task complete - now call final_answer()."
             except RuntimeError:
                 # No running loop, try to use the Discord bot's loop
                 if hasattr(self.discord, 'bot') and hasattr(self.discord.bot, 'loop'):
                     loop = self.discord.bot.loop
                     # Schedule the coroutine on the bot's event loop
                     asyncio.run_coroutine_threadsafe(send_discord_message(), loop)
-                    return "Discord message scheduled for delivery"
+                    return "Discord message has been sent successfully. Task complete - now call final_answer()."
                 else:
                     return "Error: No event loop available for Discord operations"
         
