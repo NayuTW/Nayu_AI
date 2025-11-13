@@ -89,6 +89,9 @@ async def main():
     store.set_setting("speak_on_error", "1" if speak_on_error else "0")
     store.set_setting("voice_enabled", "1" if voice_enabled else "0")
 
+    os.environ['OLLAMA_GPU_LAYERS'] = '40'
+    os.environ['OLLAMA_FLASH_ATTENTION'] = '1'
+
     # Create session ID
     session_id = f"session-{int(time.time())}-{uuid.uuid4().hex[:8]}"
     

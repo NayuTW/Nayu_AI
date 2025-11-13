@@ -3,11 +3,14 @@ Main Agent using smolagents CodeAgent for orchestration.
 This replaces the custom LLM-based orchestrator with smolagents' built-in CodeAgent.
 """
 import asyncio
+import numpy as np
 import os
 import time
 from typing import Any, Dict, List, Optional
 
 from smolagents import CodeAgent
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 
 from src.agents.state import SharedState
 from src.agents.llm.litellm_model import OllamaLiteLLMModel
@@ -27,8 +30,8 @@ from src.agents.tools.app_launcher_smol import AppLauncherSmolTool
 from src.agents.memory.session_manager import SessionManager
 
 
-# System prompt for the main agent
-SYSTEM_PROMPT = """You are a helpful AI assistant. Chat naturally and use tools when needed.
+# System prompt for the main agent - CONDENSED
+SYSTEM_PROMPT = """You are a helpful AI named Kanna. Chat naturally and use tools ONLY when needed.
 
 CRITICAL RULES:
 1. ALWAYS end with final_answer() - this is mandatory for every response
@@ -38,7 +41,7 @@ CRITICAL RULES:
 TOOLS:
 - launch_app(app_name): Launch desktop apps
 - memory: remember/recall information
-- webbrowser: search web, fetch URLs
+- webbrowser: search the web, fetch URLs
 - desktop: control keyboard/mouse, take screenshots
   • Use 'press' for special keys (enter, tab), 'type' for text
   • Add delays: wait 0.8s after launcher, 0.3s after typing, 2s after app launch
@@ -47,6 +50,13 @@ TOOLS:
 - discord: send Discord messages
   • CRITICAL: Call final_answer() immediately after discord confirms success
   
+Make sure to include code with the correct pattern, for instance:
+    Thoughts: Your thoughts
+    <code>
+    # Your python code here
+    </code>
+    Make sure to provide correct code blobs.
+
 Be conversational and concise."""
 
 
@@ -63,7 +73,7 @@ class MainAgentSmol:
         registry: ToolRegistry,
         notifier: Notifier,
         store: SQLiteStore,
-        session_id: str
+        session_id: str,
     ):
         self.state = state
         self.bus = bus
@@ -80,9 +90,9 @@ class MainAgentSmol:
             max_tokens=4096,
             summary_interval=5
         )
-        
+       
         # Initialize LiteLLM model for Ollama
-        model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
+        model_name = os.getenv("AGENT_MODEL", "qwen2.5:14b-instruct-q4_k_m")
         num_ctx = int(os.getenv("AGENT_NUM_CTX", "16000"))
         
         self.model = OllamaLiteLLMModel(
@@ -94,7 +104,7 @@ class MainAgentSmol:
         # Initialize tools
         self.tools = []
         self._init_tools()
-        
+
         # Initialize CodeAgent
         self.agent = CodeAgent(
             tools=self.tools,
@@ -105,9 +115,36 @@ class MainAgentSmol:
                 "bs4", "duckduckgo_search", "readability", "html2text"
             ]
         )
-    
+
+        # Lightweight embedding model for tool selection
+        print("Loading tool embedder (this may take a moment on first run)...")
+        self.tool_embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
+        # Pre-compute tool embeddings
+        self.tool_embeddings = {}
+        for tool in self.tools:
+            embedding = self.tool_embedder.encode(
+                f"{tool.name}: {tool.description}"
+            )
+            self.tool_embeddings[tool.name] = embedding
+        print(f"Pre-computed embeddings for {len(self.tool_embeddings)} tools")
+
+    def _is_simple_request(self, text: str) -> bool:
+        """Fast heuristic to detect simple requests."""
+        simple_patterns = [
+            'hi', 'hello', 'thanks', 'thank you', 'ok', 'okay', 
+            'yes', 'no', 'got it', 'understood'
+        ]
+        return (
+            len(text.split()) < 10 and
+            any(p in text.lower() for p in simple_patterns)
+        )
+
     def _init_tools(self):
         """Initialize all smolagents-compatible tools."""
+        desktop = None
+        vision = None
+        
         try:
             # Web browser tool
             webbrowser = WebBrowserSmolTool()
@@ -145,12 +182,15 @@ class MainAgentSmol:
 
         try:
             # App Launcher tool (composite tools using desktop)
-            app_launcher = AppLauncherSmolTool(desktop, vision)
-            self.tools.append(app_launcher)
-            self.registry.register("launch_app", app_launcher, {
-                "name": app_launcher.name,
-                "description": app_launcher.description
-            })
+            if desktop is not None and vision is not None:
+                app_launcher = AppLauncherSmolTool(desktop, vision)
+                self.tools.append(app_launcher)
+                self.registry.register("launch_app", app_launcher, {
+                    "name": app_launcher.name,
+                    "description": app_launcher.description
+                })
+            else:
+                print("Warning: Skipping app_launcher - desktop or vision not available")
         except Exception as e:
             print(f"Warning: Could not initialize app_launcher tool: {e}")
         
@@ -205,6 +245,12 @@ class MainAgentSmol:
             # Add to tools list
             self.tools.append(discord_tool)
             
+            # Add embedding for new tool
+            embedding = self.tool_embedder.encode(
+                f"{discord_tool.name}: {discord_tool.description}"
+            )
+            self.tool_embeddings[discord_tool.name] = embedding
+            
             # Reinitialize the main CodeAgent with updated tools
             self.agent = CodeAgent(
                 tools=self.tools,
@@ -229,7 +275,33 @@ class MainAgentSmol:
             import traceback
             traceback.print_exc()
             return False
-    
+
+    def _select_relevant_tools(self, user_text: str, max_tools: int = 6) -> List[str]:
+        """Select only relevant tools to reduce prompt size."""
+        # Encode the user query
+        query_embedding = self.tool_embedder.encode(user_text)
+        
+        # Reshape embeddings to 2D for sklearn
+        query_embedding_2d = query_embedding.reshape(1, -1)
+        
+        # Calculate similarities
+        similarities = {}
+        for tool_name, tool_emb in self.tool_embeddings.items():
+            tool_emb_2d = tool_emb.reshape(1, -1)
+            similarity = cosine_similarity(query_embedding_2d, tool_emb_2d)[0][0]
+            similarities[tool_name] = similarity
+        
+        # Sort by similarity and return top N tool names
+        relevant_tools = sorted(
+            similarities.items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )[:max_tools]
+        
+        tool_names = [name for name, score in relevant_tools]
+        print(f"Selected tools for query '{user_text[:50]}...': {tool_names}")
+        return tool_names
+
     async def handle_user_message(
         self,
         user_text: str,
@@ -271,7 +343,7 @@ class MainAgentSmol:
             conversation_history = "\n".join(history_lines)
         
         # Build prompt with full context including session memory
-        full_prompt = f"""{SYSTEM_PROMPT}
+        static_prefix = f"""{SYSTEM_PROMPT}
 {self.os_context}
 
 CONTEXT:
@@ -281,8 +353,9 @@ SESSION SUMMARY:
 {summary if summary else "No previous conversation summary."}
 
 WORKING SET:
-{working_set_context if working_set_context else "No active artifacts or tasks."}
+{working_set_context if working_set_context else "No active artifacts or tasks."}"""
 
+        dynamic_suffix = f"""
 RECENT CONVERSATION:
 {conversation_history if conversation_history else "This is the start of the conversation."}
 
@@ -295,6 +368,8 @@ USER MESSAGE:
 
 Respond naturally and use tools only if needed. You can reference previous messages and artifacts from the conversation."""
         
+        full_prompt = static_prefix + dynamic_suffix
+
         # Add user message to session
         self.session_manager.add_message(
             session_id=active_session_id,
@@ -310,12 +385,19 @@ Respond naturally and use tools only if needed. You can reference previous messa
             "meta": external_metadata or {},
             "session_id": active_session_id
         })
-        
+
+        # Select subset of relevant tools (disabled for now - see note below)
+        relevant_tool_names = self._select_relevant_tools(user_text, max_tools=6)
+        relevant_tools = [t for t in self.tools if t.name in relevant_tool_names]
+
         try:
-            # Run the agent
             t0 = time.time()
+            
+            # Use standard agent for now (tool selection can be enabled later)
             result = await asyncio.to_thread(self.agent.run, full_prompt)
+            
             latency_ms = (time.time() - t0) * 1000
+            print(f"Agent response time: {latency_ms:.0f}ms")
             
             # Clean up result if it's empty or contains code
             if not result or not result.strip():

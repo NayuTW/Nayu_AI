@@ -3,6 +3,7 @@ LiteLLMModel wrapper for Ollama integration using smolagents framework.
 """
 import os
 from typing import Any, Dict, List, Optional
+import litellm
 
 try:
     from smolagents import LiteLLMModel as BaseLiteLLMModel
@@ -26,6 +27,15 @@ class OllamaLiteLLMModel(BaseLiteLLMModel if SMOLAGENTS_AVAILABLE else object):
         **kwargs: Additional arguments passed to LiteLLMModel
     """
     
+    def __call__(self, messages, stream=False, **kwargs):
+        if stream:
+            return litellm.completion(
+                model=f"ollama/{self.model_id}",
+                messages=messages,
+                stream=True,
+                num_ctx=self.num_ctx,
+                **kwargs
+            )
     def __init__(
         self,
         model_id: Optional[str] = None,

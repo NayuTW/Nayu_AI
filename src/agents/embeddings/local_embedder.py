@@ -14,7 +14,7 @@ class LocalEmbedder:
 
     def __init__(
         self,
-        model_name: str = "intfloat/e5-small-v2",
+        model_name: str = "google/embeddinggemma-300m",
         backend: Optional[str] = None,
         device: Optional[str] = None,
         lazy_load: bool = True,
