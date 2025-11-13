@@ -35,6 +35,7 @@ CORE BEHAVIOR:
 - Only use tools when the user's request specifically requires them
 - Think: "Can I answer this directly, or do I need a tool?"
 - You may receive messages from multiple channels (e.g., cli, discord)
+- CRITICAL: Always provide your final response using the final_answer function
 
 TOOL USAGE:
 - Use tools judiciously - not every request needs a tool
@@ -96,7 +97,7 @@ class MainAgentSmol:
         
         # Initialize LiteLLM model for Ollama
         model_name = os.getenv("AGENT_MODEL", "llama3.1:8b-instruct-q4_K_M")
-        num_ctx = int(os.getenv("AGENT_NUM_CTX", "10000"))
+        num_ctx = int(os.getenv("AGENT_NUM_CTX", "8000"))
         
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
