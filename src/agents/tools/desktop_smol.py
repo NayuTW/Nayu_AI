@@ -96,24 +96,34 @@ def get_os_info() -> dict:
 class DesktopSmolTool(Tool):
     """
     Control keyboard and mouse, take screenshots.
+    
+    IMPORTANT: Desktop actions take time to complete. Always use proper delays:
+    - After opening launcher: wait 0.5-1.0s before typing
+    - After typing app name: wait 0.3-0.5s before pressing enter
+    - After launching app: wait 2-3s for app to start
+    - Use screenshot action to verify the current state before proceeding
     """
     name = "desktop"
     
     # Generate OS-aware description at class definition time.
-    # This is intentional - OS detection happens once at import/startup since
-    # the operating system doesn't change during runtime. For testing different
-    # environments, the module should be reloaded.
     _os_info = get_os_info()
     description = (
         "Control desktop via keyboard/mouse or take screenshots. "
         "Actions: 'screenshot' (returns the file path to the saved screenshot in .cache/), "
         "'click' (x, y coordinates), 'move' (x, y coordinates), "
-        "'typewrite' (text string), 'hotkey' (keys list like ['ctrl', 'c'])"
+        "'type' (text string - for typing text only), "
+        "'press' (key - for single keys like 'enter', 'tab', 'space'), "
+        "'hotkey' (keys list like ['ctrl', 'c'] - for key combinations), "
+        "'wait' (seconds - pause execution to let UI catch up). "
+        "CRITICAL: Use 'press' for special keys (enter, tab, escape), NOT 'type'. "
+        "CRITICAL: Always wait 0.5-1s after hotkeys before typing. "
+        "CRITICAL: Always wait 0.3-0.5s after typing before pressing enter. "
+        "CRITICAL: Take a screenshot to verify success before proceeding to next step."
     )
     inputs = {
         "action": {
             "type": "string",
-            "description": "Action: screenshot, click, move, typewrite, or hotkey"
+            "description": "Action: screenshot, click, move, type, press, hotkey, or wait"
         },
         "x": {
             "type": "number",
@@ -127,12 +137,22 @@ class DesktopSmolTool(Tool):
         },
         "text": {
             "type": "string",
-            "description": "Text to type for typewrite action",
+            "description": "Text to type (for 'type' action only - no special keys)",
+            "nullable": True
+        },
+        "key": {
+            "type": "string",
+            "description": "Single key to press (for 'press' action: enter, tab, space, escape, etc.)",
             "nullable": True
         },
         "keys": {
             "type": "array",
             "description": "Keys for hotkey action (e.g., ['ctrl', 'c'])",
+            "nullable": True
+        },
+        "seconds": {
+            "type": "number",
+            "description": "Seconds to wait (for 'wait' action, e.g., 0.5, 1.0, 2.0)",
             "nullable": True
         }
     }
@@ -145,6 +165,7 @@ class DesktopSmolTool(Tool):
                 "Desktop tools not available. Install with: pip install pyautogui mss Pillow"
             )
         pyautogui.FAILSAFE = True
+        pyautogui.PAUSE = 0.1  # Small default pause between pyautogui actions
         os.makedirs(".cache", exist_ok=True)
         self.last_screenshot_path = None
         self.os_info = get_os_info()
@@ -165,7 +186,9 @@ class DesktopSmolTool(Tool):
         x: Optional[float] = None,
         y: Optional[float] = None,
         text: Optional[str] = None,
-        keys: Optional[List[str]] = None
+        key: Optional[str] = None,
+        keys: Optional[List[str]] = None,
+        seconds: Optional[float] = None
     ) -> str:
         """Execute desktop action and return result description."""
         if action == "screenshot":
@@ -183,19 +206,45 @@ class DesktopSmolTool(Tool):
             if x is None or y is None:
                 return "Error: x and y coordinates required for click action"
             pyautogui.click(x, y)
+            time.sleep(0.1)  # Brief pause after click
             return f"Clicked at ({x}, {y})"
         
-        elif action == "typewrite":
+        elif action == "type":
             if not text:
-                return "Error: text required for typewrite action"
-            pyautogui.typewrite(text, interval=0.02)
+                return "Error: text required for type action"
+            # Use write() instead of typewrite() for better unicode support
+            # But with a small interval to simulate human typing
+            for char in text:
+                pyautogui.write(char)
+                time.sleep(0.02)  # 20ms between characters
             return f"Typed: {text[:50]}{'...' if len(text) > 50 else ''}"
+        
+        elif action == "press":
+            if not key:
+                return "Error: key required for press action"
+            # Normalize key names
+            key_lower = key.lower()
+            pyautogui.press(key_lower)
+            time.sleep(0.1)  # Brief pause after key press
+            return f"Pressed key: {key}"
         
         elif action == "hotkey":
             if not keys:
                 return "Error: keys list required for hotkey action"
             pyautogui.hotkey(*keys)
+            time.sleep(0.15)  # Slightly longer pause after hotkey combos
             return f"Pressed hotkey: {'+'.join(keys)}"
         
+        elif action == "wait":
+            if seconds is None:
+                return "Error: seconds required for wait action"
+            if seconds <= 0 or seconds > 10:
+                return "Error: wait time must be between 0 and 10 seconds"
+            time.sleep(seconds)
+            return f"Waited {seconds} seconds"
+        
         else:
-            return f"Error: Unknown action '{action}'. Valid actions: screenshot, move, click, typewrite, hotkey"
+            return (
+                f"Error: Unknown action '{action}'. "
+                "Valid actions: screenshot, move, click, type, press, hotkey, wait"
+            )

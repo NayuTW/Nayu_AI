@@ -23,6 +23,7 @@ from src.agents.tools.vision_smol import VisionSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
 from src.agents.tools.codeagent import CodeAgentTool
+from src.agents.tools.app_launcher_smol import AppLauncherSmolTool
 from src.agents.memory.session_manager import SessionManager
 
 
@@ -39,9 +40,18 @@ CORE BEHAVIOR:
 
 TOOL USAGE:
 - Use tools judiciously - not every request needs a tool
+- app_launcher: Launch a desktop app by providing the app name
 - memory tool: Use 'remember' to store information, 'recall' to retrieve it
 - webbrowser tool: Search the web, fetch URLs, or research topics
 - desktop tool: Control keyboard/mouse or take screenshots (returns file path for screenshots)
+  - CRITICAL: Desktop UI actions need time to complete! Always use these delays:
+    * After opening launcher: wait 0.8-1.0s before typing
+    * After typing: wait 0.3-0.5s before pressing enter
+    * After launching app: wait 2-3s for app to fully start
+    * After any major UI change: take a screenshot to verify state
+  - CRITICAL: Use 'press' action for special keys (enter, tab, escape), NOT 'type'
+  - CRITICAL: Use 'type' action for regular text only
+  - WORKFLOW: hotkey → wait → type → wait → press → wait → screenshot to verify
 - vision tool: Analyze images or screenshots (use the file path from desktop tool)
 - speech tool: ALWAYS use when asked to "speak", "say out loud", "read aloud", or generate audio/voice output. Also use for transcribing audio files.
 - codeexec tool: Run Python code for complex tasks
@@ -145,7 +155,7 @@ class MainAgentSmol:
             self.os_context = f"\nSYSTEM INFO: Running on {desktop.os_info.get('description', 'Unknown OS')}. {desktop.os_info.get('shortcuts_guide', '')}"
         except Exception as e:
             print(f"Warning: Could not initialize desktop tool: {e}")
-        
+
         try:
             # Vision tool
             vision = VisionSmolTool()
@@ -156,6 +166,17 @@ class MainAgentSmol:
             })
         except Exception as e:
             print(f"Warning: Could not initialize vision tool: {e}")
+
+        try:
+            # App Launcher tool (composite tools using desktop)
+            app_launcher = AppLauncherSmolTool(desktop, vision)
+            self.tools.append(app_launcher)
+            self.registry.register("launch_app", app_launcher, {
+                "name": app_launcher.name,
+                "description": app_launcher.description
+            })
+        except Exception as e:
+            print(f"Warning: Could not initialize app_launcher tool: {e}")
         
         try:
             # Memory tool

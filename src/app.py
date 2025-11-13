@@ -3,6 +3,7 @@ Main application entry point using smolagents architecture.
 This is the new version that uses smolagents CodeAgent for the main orchestrator.
 """
 import asyncio
+import sys
 import time
 import uvicorn
 import uuid
@@ -174,9 +175,15 @@ async def main():
         while True:
             try:
                 user = await asyncio.to_thread(input, "You: ")
-            except EOFError:
+                user = user.strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nExiting...")
                 break
-            
+            except Exception as e:
+                logger.warning(f"Input error: {e}")
+                continue
+            if not user:
+                continue
             if user.strip().lower() == "quit":
                 break
             
@@ -215,7 +222,12 @@ async def main():
                 source="cli",
                 external_metadata={"tag": "cli"}
             )
-            print(f"Agent: {resp}")
+            safe_resp = resp.replace("\r", "").replace("\x1b", "").strip()
+            print(f"Agent: {safe_resp}")
+            sys.stdout.flush()
+            sys.stdin.flush()
+            print()
+            await asyncio.sleep(0.1)
     
     finally:
         # Cancel periodic flush task
