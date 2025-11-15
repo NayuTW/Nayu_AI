@@ -27,7 +27,9 @@ from src.agents.tools.vision_smol import VisionSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
 from src.agents.tools.app_launcher_smol import AppLauncherSmolTool
+from src.agents.tools.image_rag_tools import ImageIndexTool, ImageSearchTool, ImageCompareTool, ImageFindUITool
 from src.agents.memory.session_manager import SessionManager
+from src.agents.vision.image_rag import ImageRAG
 
 
 SYSTEM_PROMPT = """You are a helpful AI named Kanna. Chat naturally and use tools ONLY when needed.
@@ -46,7 +48,11 @@ TOOLS:
 - desktop: control keyboard/mouse, take screenshots
   • Use 'press' for special keys (enter, tab), 'type' for text
   • Add delays: wait 0.8s after launcher, 0.3s after typing, 2s after app launch
-- vision(path): analyze images from screenshots
+- vision(path): analyze images from screenshots (VLM-based, slower)
+- image_index(image_path): Index a screenshot for fast search (CLIP embeddings + OCR)
+- image_search(question): Search indexed images using natural language (fast, no VLM needed)
+- image_compare(image_a, image_b): Compare two images to find differences
+- image_find_ui(query): Find UI elements by description
 - speech: text-to-speech and audio transcription
 - discord: send Discord messages
   • CRITICAL: Call final_answer() immediately after discord confirms success
@@ -222,6 +228,53 @@ class MainAgentSmol:
             })
         except Exception as e:
             print(f"Warning: Could not initialize speech tool: {e}")
+        
+        # Initialize ImageRAG system and tools
+        try:
+            print("Initializing ImageRAG system (this may take a moment)...")
+            # Create ImageRAG instance with reasonable defaults
+            image_rag = ImageRAG(
+                collection_name="image_regions",
+                model_name="ViT-B-32",
+                pretrained="laion2b_s34b_b79k",
+                use_ocr=True,
+                grid=(3, 3)
+            )
+            
+            # Create and register ImageRAG tools
+            image_index = ImageIndexTool(image_rag)
+            self.tools.append(image_index)
+            self.registry.register("image_index", image_index, {
+                "name": image_index.name,
+                "description": image_index.description
+            })
+            
+            image_search = ImageSearchTool(image_rag)
+            self.tools.append(image_search)
+            self.registry.register("image_search", image_search, {
+                "name": image_search.name,
+                "description": image_search.description
+            })
+            
+            image_compare = ImageCompareTool(image_rag)
+            self.tools.append(image_compare)
+            self.registry.register("image_compare", image_compare, {
+                "name": image_compare.name,
+                "description": image_compare.description
+            })
+            
+            image_find_ui = ImageFindUITool(image_rag)
+            self.tools.append(image_find_ui)
+            self.registry.register("image_find_ui", image_find_ui, {
+                "name": image_find_ui.name,
+                "description": image_find_ui.description
+            })
+            
+            print("ImageRAG system initialized successfully")
+        except Exception as e:
+            print(f"Warning: Could not initialize ImageRAG tools: {e}")
+            print("  Vision RAG features will not be available")
+            print("  To enable, install: pip install open_clip_torch rapidocr-onnxruntime")
         
     def add_discord_tool(self, discord_service):
         """

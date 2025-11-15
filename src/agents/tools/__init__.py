@@ -33,6 +33,12 @@ except ImportError:
     pass
 
 try:
+    from .image_rag_tools import ImageIndexTool, ImageSearchTool, ImageCompareTool, ImageFindUITool
+    __all__.extend(["ImageIndexTool", "ImageSearchTool", "ImageCompareTool", "ImageFindUITool"])
+except ImportError:
+    pass
+
+try:
     from .discord_tool_smol import DiscordSmolTool
     __all__.append("DiscordSmolTool")
 except ImportError:
