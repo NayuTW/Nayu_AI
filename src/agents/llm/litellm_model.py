@@ -30,7 +30,7 @@ class OllamaLiteLLMModel(BaseLiteLLMModel if SMOLAGENTS_AVAILABLE else object):
     def __call__(self, messages, stream=False, **kwargs):
         if stream:
             return litellm.completion(
-                model=f"ollama/{self.model_id}",
+                model=f"ollama_chat/{self.model_id}",
                 messages=messages,
                 stream=True,
                 num_ctx=self.num_ctx,
@@ -41,8 +41,8 @@ class OllamaLiteLLMModel(BaseLiteLLMModel if SMOLAGENTS_AVAILABLE else object):
         model_id: Optional[str] = None,
         api_base: str = "http://localhost:11434",
         api_key: str = "dummy",  # LiteLLM requires an API key parameter even when Ollama doesn't use authentication
-        num_ctx: int = 16000,
-        temperature: float = 0.8,
+        num_ctx: int = 4096,
+        temperature: float = 0.6,
         **kwargs
     ):
         if not SMOLAGENTS_AVAILABLE:

@@ -5,16 +5,14 @@ from functools import lru_cache
 
 class LocalEmbedder:
     """
-    Lightweight local embedder with two backends:
-    - fastembed (preferred for speed)
-    - sentence-transformers (fallback)
+    Lightweight local embedder using fastembed:
     Returns L2-normalized vectors.
     Supports lazy initialization and caching.
     """
 
     def __init__(
         self,
-        model_name: str = "google/embeddinggemma-300m",
+        model_name: str = "BAAI/bge-small-en-v1.5",
         backend: Optional[str] = None,
         device: Optional[str] = None,
         lazy_load: bool = True,
@@ -32,22 +30,15 @@ class LocalEmbedder:
         """Initialize the embedding backend (lazy loading)."""
         if self._backend is not None:
             return  # Already initialized
-        
-        if self.backend in (None, "fastembed"):
-            try:
-                from fastembed import TextEmbedding
-                self._fe_model = TextEmbedding(model_name=self.model_name)
-                self._backend = "fastembed"
-            except Exception:
-                if self.backend == "fastembed":
-                    raise
-                self._fe_model = None
-        if self._backend is None:
-            from sentence_transformers import SentenceTransformer
-            self._st_model = SentenceTransformer(self.model_name, device=self.device or "cpu")
-            self._backend = "sentence-transformers"
-        # Warm up the model with a probe
-        _ = self._embed_texts_internal(["probe"])[0]
+
+        try:
+            from fastembed import TextEmbedding
+            self._fe_model = TextEmbedding(model_name=self.model_name)
+            self._backend = "fastembed"
+        except Exception:
+            if self.backend == "fastembed":
+                raise
+            self._fe_model = None
 
     def _l2(self, v: List[float]) -> List[float]:
         s = math.sqrt(sum(x * x for x in v)) or 1.0

@@ -34,14 +34,16 @@ from src.agents.memory.session_manager import SessionManager
 SYSTEM_PROMPT = """You are a helpful AI named Kanna. Chat naturally and use tools ONLY when needed.
 
 CRITICAL RULES:
-1. ALWAYS end with final_answer() - this is mandatory for every response
+1. ALWAYS provide your final response with final_answer() - this is mandatory for every response
 2. After ANY tool succeeds (especially discord), immediately call final_answer()
 3. Process tool outputs - explain them in your own words, don't echo raw data
 
 TOOLS:
 - launch_app(app_name): Launch desktop apps
+    - This tool automatically saves a screenshot after each use. You do not need to take another screenshot, just use your vision on the screenshot taken by this tool to verify the app launched.
 - memory: remember/recall information
 - webbrowser: search the web, fetch URLs
+    - This is useful for making quick single query searches and receiving basic information from the web.
 - desktop: control keyboard/mouse, take screenshots
   • Use 'press' for special keys (enter, tab), 'type' for text
   • Add delays: wait 0.8s after launcher, 0.3s after typing, 2s after app launch
@@ -109,7 +111,7 @@ class MainAgentSmol:
         self.agent = CodeAgent(
             tools=self.tools,
             model=self.model,
-            planning_interval=5,
+            #planning_interval=5,
             max_steps=15,
             additional_authorized_imports=[
                 "requests", "json", "re", "time", "datetime",
@@ -256,7 +258,7 @@ class MainAgentSmol:
             self.agent = CodeAgent(
                 tools=self.tools,
                 model=self.model,
-                planning_interval=5,
+                #planning_interval=5,
                 max_steps=15,
                 additional_authorized_imports=[
                     "requests", "json", "re", "time", "datetime",

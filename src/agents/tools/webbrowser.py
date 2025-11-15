@@ -187,7 +187,7 @@ def _domain_from_url(url: str) -> str:
 
 class EmbeddingRanker:
     """Rank search results using local embeddings."""
-    def __init__(self, model_name: str = "intfloat/e5-small-v2"):
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
         self.emb = LocalEmbedder(model_name=model_name, lazy_load=True)
 
     def score(self, query: str, candidates: List[Dict[str, str]]) -> List[Dict[str, Any]]:
@@ -210,7 +210,7 @@ def _get_ranker() -> EmbeddingRanker:
     """Get or create singleton ranker instance."""
     global __RANKER
     if __RANKER is None:
-        __RANKER = EmbeddingRanker(model_name="intfloat/e5-small-v2")
+        __RANKER = EmbeddingRanker(model_name="BAAI/bge-small-en-v1.5")
     return __RANKER
 
 
