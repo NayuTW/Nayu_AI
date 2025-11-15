@@ -74,9 +74,3 @@ try:
     __all__.append("SpeechTool")
 except ImportError:
     pass
-
-try:
-    from .codeagent import CodeAgentTool
-    __all__.append("CodeAgentTool")
-except ImportError:
-    pass

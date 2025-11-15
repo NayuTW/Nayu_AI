@@ -9,7 +9,8 @@ import time
 from typing import Any, Dict, List, Optional
 
 from smolagents import CodeAgent
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
+from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
 from src.agents.state import SharedState
@@ -25,12 +26,10 @@ from src.agents.tools.desktop_smol import DesktopSmolTool
 from src.agents.tools.vision_smol import VisionSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
-from src.agents.tools.codeagent import CodeAgentTool
 from src.agents.tools.app_launcher_smol import AppLauncherSmolTool
 from src.agents.memory.session_manager import SessionManager
 
 
-# System prompt for the main agent - CONDENSED
 SYSTEM_PROMPT = """You are a helpful AI named Kanna. Chat naturally and use tools ONLY when needed.
 
 CRITICAL RULES:
@@ -94,7 +93,7 @@ class MainAgentSmol:
         )
        
         # Initialize LiteLLM model for Ollama
-        model_name = os.getenv("AGENT_MODEL", "qwen2.5:14b-instruct-q4_k_m")
+        model_name = os.getenv("AGENT_MODEL", "qwen3:8b-q6_K")
         num_ctx = int(os.getenv("AGENT_NUM_CTX", "16000"))
         
         self.model = OllamaLiteLLMModel(
@@ -121,15 +120,20 @@ class MainAgentSmol:
 
         # Lightweight embedding model for tool selection
         print("Loading tool embedder (this may take a moment on first run)...")
-        self.tool_embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.tool_embedder = TextEmbedding('BAAI/bge-small-en-v1.5')
 
-        # Pre-compute tool embeddings
+        # Pre-compute tool embeddings (stored as 2D numpy arrays of shape (1, d))
         self.tool_embeddings = {}
         for tool in self.tools:
-            embedding = self.tool_embedder.encode(
+            embedding = self.tool_embedder.embed(
                 f"{tool.name}: {tool.description}"
             )
-            self.tool_embeddings[tool.name] = embedding
+            try:
+                emb_arr = np.array(embedding, dtype=float).reshape(1, -1)
+            except Exception:
+                # Fallback: attempt to coerce to list then array
+                emb_arr = np.array(list(embedding), dtype=float).reshape(1, -1)
+            self.tool_embeddings[tool.name] = emb_arr
         print(f"Pre-computed embeddings for {len(self.tool_embeddings)} tools")
 
     def _is_simple_request(self, text: str) -> bool:
@@ -219,15 +223,6 @@ class MainAgentSmol:
         except Exception as e:
             print(f"Warning: Could not initialize speech tool: {e}")
         
-        try:
-            # Code execution tool (nested CodeAgent)
-            codeexec = CodeAgentTool(self.state)
-            # Note: CodeAgentTool is not a smolagents Tool, it's a wrapper
-            # We register it but don't add to self.tools
-            self.registry.register("codeexec", codeexec, CodeAgentTool.spec())
-        except Exception as e:
-            print(f"Warning: Could not initialize codeexec tool: {e}")
-    
     def add_discord_tool(self, discord_service):
         """
         Add Discord tool to the agent after initialization.
@@ -249,10 +244,14 @@ class MainAgentSmol:
             self.tools.append(discord_tool)
             
             # Add embedding for new tool
-            embedding = self.tool_embedder.encode(
+            embedding = self.tool_embedder.embed(
                 f"{discord_tool.name}: {discord_tool.description}"
             )
-            self.tool_embeddings[discord_tool.name] = embedding
+            try:
+                emb_arr = np.array(embedding, dtype=float).reshape(1, -1)
+            except Exception:
+                emb_arr = np.array(list(embedding), dtype=float).reshape(1, -1)
+            self.tool_embeddings[discord_tool.name] = emb_arr
             
             # Reinitialize the main CodeAgent with updated tools
             self.agent = CodeAgent(
@@ -281,30 +280,47 @@ class MainAgentSmol:
             return False
 
     def _select_relevant_tools(self, user_text: str, max_tools: int = 6) -> List[str]:
-        """Select only relevant tools to reduce prompt size."""
+        """Select only relevant tools to reduce prompt size.
+
+        Uses cosine similarity in the original embedding space rather than PCA.
+        This avoids PCA errors when dealing with single-sample embeddings.
+        """
         # Encode the user query
-        query_embedding = self.tool_embedder.encode(user_text)
+        try:
+            query_embedding = np.array(self.tool_embedder.embed(user_text), dtype=float).reshape(1, -1)
+        except Exception:
+            query_embedding = np.array(list(self.tool_embedder.embed(user_text)), dtype=float).reshape(1, -1)
         
-        # Reshape embeddings to 2D for sklearn
-        query_embedding_2d = query_embedding.reshape(1, -1)
+        tool_names = list(self.tool_embeddings.keys())
+        if not tool_names:
+            return []
         
-        # Calculate similarities
-        similarities = {}
-        for tool_name, tool_emb in self.tool_embeddings.items():
-            tool_emb_2d = tool_emb.reshape(1, -1)
-            similarity = cosine_similarity(query_embedding_2d, tool_emb_2d)[0][0]
-            similarities[tool_name] = similarity
-        
-        # Sort by similarity and return top N tool names
-        relevant_tools = sorted(
-            similarities.items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        )[:max_tools]
-        
-        tool_names = [name for name, score in relevant_tools]
-        print(f"Selected tools for query '{user_text[:50]}...': {tool_names}")
-        return tool_names
+        # Stack tool embeddings into matrix (n_tools, d)
+        try:
+            tool_emb_matrix = np.vstack([self.tool_embeddings[name] for name in tool_names])
+        except Exception as e:
+            # If embeddings shapes mismatch for any reason, fall back to returning a capped list
+            print(f"Warning: Could not stack tool embeddings for similarity check: {e}")
+            return tool_names[:max_tools]
+
+        # Ensure dimensionality matches
+        if query_embedding.shape[1] != tool_emb_matrix.shape[1]:
+            print(
+                f"Warning: Embedding dimension mismatch (query: {query_embedding.shape[1]}, "
+                f"tools: {tool_emb_matrix.shape[1]}). Skipping similarity-based selection."
+            )
+            return tool_names[:max_tools]
+
+        # Compute cosine similarities: result shape (1, n_tools)
+        similarities = cosine_similarity(query_embedding, tool_emb_matrix)[0]
+
+        # Pair names and scores and sort
+        name_score_pairs = list(zip(tool_names, similarities))
+        name_score_pairs.sort(key=lambda x: x[1], reverse=True)
+
+        relevant = [name for name, score in name_score_pairs[:max_tools]]
+        print(f"Selected tools for query '{user_text[:50]}...': {relevant}")
+        return relevant
 
     async def handle_user_message(
         self,
