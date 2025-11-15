@@ -38,7 +38,7 @@ class VisionSmolTool(Tool):
     }
     output_type = "string"
     
-    def __init__(self, model_id: str = "gemma3:4b", ollama_url: str = "http://localhost:11434", timeout: int = 120):
+    def __init__(self, model_id: str = "gemma3:12b-it-q4_K_M", ollama_url: str = "http://localhost:11434", timeout: int = 120):
         super().__init__()
         if not VISION_AVAILABLE:
             raise ImportError(

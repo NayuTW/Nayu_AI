@@ -109,6 +109,7 @@ class MainAgentSmol:
         self.agent = CodeAgent(
             tools=self.tools,
             model=self.model,
+            planning_interval=5,
             max_steps=15,
             additional_authorized_imports=[
                 "requests", "json", "re", "time", "datetime",
@@ -255,6 +256,7 @@ class MainAgentSmol:
             self.agent = CodeAgent(
                 tools=self.tools,
                 model=self.model,
+                planning_interval=5,
                 max_steps=15,
                 additional_authorized_imports=[
                     "requests", "json", "re", "time", "datetime",
