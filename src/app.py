@@ -1,7 +1,3 @@
-"""
-Main application entry point using smolagents architecture.
-This is the new version that uses smolagents CodeAgent for the main orchestrator.
-"""
 import asyncio
 import sys
 import time

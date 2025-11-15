@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from smolagents import Tool  # available via your smolagents dependency
+from smolagents import Tool
 
 class DiscordSendChannelTool(Tool):
     name = "discord_send_channel"
