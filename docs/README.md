@@ -104,15 +104,14 @@ virsh net-dhcp-leases default
   - Vision: Ollama VLM for image analysis and OCR
   - Speech: local STT with faster-whisper and TTS with NeuTTS-Air voice cloning
   - Memory: Chroma vector store with local embeddings (fastembed/sentence-transformers)
-  - Code execution: nested smolagents CodeAgent with guardrails
+  - WriteFile: Safe file writing to .workspace directory with guardrails
   - Markdown Browser: DuckDuckGo search/fetch/browse → Markdown with citations and embedding‑based ranking
-- Guardrails for CodeAgent child process:
-  - Import allowlist
-  - File IO disabled by default (optional read‑only jail)
-  - Subprocess and shell blocked
-  - Requests only allowed from approved tool modules (e.g., Markdown browser)
-  - Step and stdout/err caps
-  - Optional CPU and memory limits (POSIX)
+- Guardrails for WriteFile tool:
+  - Restricted to .workspace directory only
+  - Limited to safe file extensions (.py, .txt, .md, .csv, .json, .yaml, etc.)
+  - Scans Python files for harmful code patterns (os.system, subprocess, eval, exec)
+  - Warns about sensitive data patterns (passwords, API keys, secrets)
+  - Blocks path traversal attempts
 - Dashboard:
   - Toggle tools ON/OFF (feature flags)
   - Circuit breaker auto‑disables misbehaving tools
