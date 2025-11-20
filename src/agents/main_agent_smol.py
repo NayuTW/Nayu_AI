@@ -27,6 +27,7 @@ from src.agents.tools.vision_smol import VisionSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
 from src.agents.tools.app_launcher_smol import AppLauncherSmolTool
+from src.agents.tools.writefile_smol import WriteFileSmolTool
 from src.agents.memory.session_manager import SessionManager
 
 
@@ -48,6 +49,10 @@ TOOLS:
   • Add delays: wait 0.8s after launcher, 0.3s after typing, 2s after app launch
 - vision(path): analyze images from screenshots
 - speech: text-to-speech and audio transcription
+- write_file: create/write files in .workspace directory
+  • Supports common formats: .py, .txt, .md, .csv, .json, .yaml, .html, .js, etc.
+  • Has safety guardrails to prevent harmful code
+  • Use write_file(filename='myfile.txt', content='...', mode='write')
 - discord: send Discord messages
   • CRITICAL: Call final_answer() immediately after discord confirms success
   
@@ -222,6 +227,17 @@ class MainAgentSmol:
             })
         except Exception as e:
             print(f"Warning: Could not initialize speech tool: {e}")
+        
+        try:
+            # WriteFile tool
+            write_file = WriteFileSmolTool(workspace_dir=".workspace")
+            self.tools.append(write_file)
+            self.registry.register("write_file", write_file, {
+                "name": write_file.name,
+                "description": write_file.description
+            })
+        except Exception as e:
+            print(f"Warning: Could not initialize write_file tool: {e}")
         
     def add_discord_tool(self, discord_service):
         """
