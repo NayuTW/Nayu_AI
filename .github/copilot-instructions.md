@@ -26,8 +26,8 @@ Nayu_AI is a fully local, Python-based multi-agent orchestrator system designed 
    - `vision.py`: VLM for screenshots/OCR
    - `speech.py`: Local STT/TTS with faster-whisper and NeuTTS-Air
    - `memory.py`: Chroma vector store with local embeddings
-   - `codeagent.py`: Sandboxed code execution with guardrails
-   - `md_browser.py`: Web search/fetch with Markdown conversion and embedding-based ranking
+   - `writefile_smol.py`: Safe file writing to .workspace directory with guardrails
+   - `webbrowser_smol.py`: Web search/fetch with Markdown conversion and embedding-based ranking
 
 3. **Dashboard** (`src/dashboard/`)
    - FastAPI server with HTMX frontend
@@ -44,7 +44,7 @@ Nayu_AI is a fully local, Python-based multi-agent orchestrator system designed 
 
 5. **Sandbox & Security** (`src/agents/sandbox/`)
    - `guardrails.py`: Import allowlist, file I/O restrictions, subprocess blocking
-   - Controlled execution environment for CodeAgent
+   - Used by WriteFileTool for safe file operations within .workspace directory
 
 ## Code Conventions
 

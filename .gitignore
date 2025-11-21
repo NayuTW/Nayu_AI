@@ -228,3 +228,7 @@ neuttsair/
 # Modelfiles
 Modelfile
 ModelfileR1
+
+# Workspace directory (exclude all generated content except README)
+.workspace/*
+!.workspace/README.md
