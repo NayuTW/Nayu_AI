@@ -50,14 +50,6 @@ TOOLS:
 - speech: text-to-speech and audio transcription
 - discord: send Discord messages
   • CRITICAL: Call final_answer() immediately after discord confirms success
-  
-Make sure to include code with the correct pattern, for instance:
-    Thoughts: Your thoughts
-    <code>
-    # Your python code here
-    </code>
-    Make sure to provide correct code blobs.
-
 Be conversational and concise."""
 
 
