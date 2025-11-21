@@ -40,7 +40,8 @@ CRITICAL RULES:
 
 TOOLS:
 - launch_app(app_name): Launch desktop apps
-    - This tool automatically saves a screenshot after each use. You do not need to take another screenshot, just use your vision on the screenshot taken by this tool to verify the app launched.
+    - If you launch 'terminal' with this tool, it will open a new terminal window navigated to your .workspace directory.
+    - This tool automatically saves a screenshot after each use.
 - memory: remember/recall information
 - webbrowser: search the web, fetch URLs
     - This is useful for making quick single query searches and receiving basic information from the web.
@@ -55,6 +56,9 @@ TOOLS:
   • Use write_file(filename='myfile.txt', content='...', mode='write')
 - discord: send Discord messages
   • CRITICAL: Call final_answer() immediately after discord confirms success
+  • CRITICAL: Make sure to wrap your code blocks in <code>...</code> NOTE: All responses must be given in a code block.
+  - Nothing outside of the code block will be seen by the user
+  • CRITICAL: To provide your final response you MUST call final_answer("final answer here") within your code block
 Be conversational and concise."""
 
 
@@ -187,7 +191,7 @@ class MainAgentSmol:
         try:
             # App Launcher tool (composite tools using desktop)
             if desktop is not None and vision is not None:
-                app_launcher = AppLauncherSmolTool(desktop, vision)
+                app_launcher = AppLauncherSmolTool(desktop)
                 self.tools.append(app_launcher)
                 self.registry.register("launch_app", app_launcher, {
                     "name": app_launcher.name,
