@@ -23,6 +23,12 @@ try:
 except ImportError:
     RapidOCR = None
 
+# add pytesseract fallback import attempt
+try:
+    import pytesseract
+except Exception:
+    pytesseract = None
+
 
 def _device() -> str:
     """Get the best available device (cuda or cpu)."""
@@ -49,6 +55,13 @@ def _tiles(img: Image.Image, grid: Tuple[int, int] = (3, 3)) -> List[Tuple[Tuple
             box = (i * tw, j * th, (i + 1) * tw if i < gw - 1 else w, (j + 1) * th if j < gh - 1 else h)
             tiles.append((box, img.crop(box)))
     return tiles
+
+# helper: convert bbox to primitive dict for Chroma metadata
+def _bbox_dict(bbox: Tuple[int, int, int, int]) -> Dict[str, int]:
+    # Chroma requires metadata values to be primitive types.
+    # Return a simple primitive representation (comma-separated string).
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    return f"{x1},{y1},{x2},{y2}"
 
 
 class CLIPEncoder:
@@ -107,9 +120,6 @@ class CLIPEncoder:
 class ImageRAG:
     """
     Image RAG system for indexing and searching images using embeddings.
-    
-    Uses CLIP embeddings and OCR to index images as tiles in a vector database,
-    enabling fast similarity search and question answering over visual content.
     """
     
     def __init__(
@@ -123,48 +133,41 @@ class ImageRAG:
     ):
         """
         Initialize ImageRAG system.
-        
-        Args:
-            chroma_client: ChromaDB client (creates new if None)
-            collection_name: Name of the Chroma collection
-            model_name: CLIP model architecture
-            pretrained: CLIP pretrained weights
-            use_ocr: Whether to use OCR for text extraction
-            grid: Grid size for tiling (e.g., (3, 3) for 9 tiles)
         """
         self.encoder = CLIPEncoder(model_name=model_name, pretrained=pretrained)
         self.grid = grid
         self.chroma = chroma_client or chromadb.Client()
         self.col = self.chroma.get_or_create_collection(collection_name)
         self.ocr = RapidOCR() if (use_ocr and RapidOCR is not None) else None
+        # track embedding dimensionality (set on first index)
+        self.embedding_dim: Optional[int] = None
 
     def _ocr_text(self, image: Image.Image) -> str:
         """
-        Extract text from image using OCR.
-        
-        Args:
-            image: PIL Image
-            
-        Returns:
-            Extracted text as a single string
+        Extract text from image using OCR with fallbacks.
         """
-        if self.ocr is None:
-            return ""
-        res, _ = self.ocr(np.array(image)[:, :, ::-1])  # expects BGR
-        if not res:
-            return ""
-        return " ".join([r[1] for r in res])
+        if self.ocr is not None:
+            try:
+                res, _ = self.ocr(np.array(image)[:, :, ::-1])  # expects BGR
+                if res:
+                    return " ".join([r[1] for r in res])
+            except Exception:
+                # fallthrough to other fallbacks
+                pass
+
+        # pytesseract fallback if available
+        if pytesseract is not None:
+            try:
+                txt = pytesseract.image_to_string(image)
+                return txt.strip()
+            except Exception:
+                pass
+
+        return ""
 
     def index_image(self, image_path: str, action_id: Optional[str] = None) -> Dict:
         """
         Index an image by computing embeddings and OCR for the whole image and tiles.
-        
-        Args:
-            image_path: Path to the image file
-            action_id: Optional action identifier for tracking
-            
-        Returns:
-            Dict with image_id, regions_indexed, and path
         """
         assert os.path.exists(image_path), f"Image not found: {image_path}"
         img = Image.open(image_path).convert("RGB")
@@ -173,6 +176,12 @@ class ImageRAG:
         # Whole-image embedding + OCR
         whole_emb = self.encoder.embed_image(img).tolist()
         whole_ocr = self._ocr_text(img)
+
+        # set embedding dim if unset
+        try:
+            self.embedding_dim = len(whole_emb)
+        except Exception:
+            self.embedding_dim = None
 
         ids = []
         embs = []
@@ -185,7 +194,7 @@ class ImageRAG:
         metadatas.append({
             "image_id": image_id,
             "image_path": image_path,
-            "bbox": [0, 0, img.width, img.height],
+            "bbox": _bbox_dict((0, 0, img.width, img.height)),
             "type": "whole",
             "action_id": action_id or "",
         })
@@ -200,12 +209,18 @@ class ImageRAG:
             metadatas.append({
                 "image_id": image_id,
                 "image_path": image_path,
-                "bbox": [int(x) for x in bbox],
+                "bbox": _bbox_dict(bbox),
                 "type": "tile",
                 "tile_index": idx,
                 "action_id": action_id or "",
             })
             documents.append(tile_ocr or "")
+
+        # debug: print indexing summary
+        try:
+            print(f"[ImageRAG] Adding {len(ids)} regions for image {image_id} (emb_dim={self.embedding_dim})")
+        except Exception:
+            pass
 
         self.col.add(ids=ids, embeddings=embs, metadatas=metadatas, documents=documents)
         return {"image_id": image_id, "regions_indexed": len(ids), "path": image_path}
@@ -219,32 +234,59 @@ class ImageRAG:
     ) -> Dict:
         """
         Search for image regions matching a text query.
-        
-        Args:
-            question: Text query
-            image_id: Optional image ID to restrict search
-            k: Number of results to return
-            where: Optional additional filters
-            
-        Returns:
-            Dict with question, summary, and evidence list
         """
         qvec = self.encoder.embed_text(question).tolist()
+
+        # debug: check embedding dims
+        if self.embedding_dim is not None and len(qvec) != self.embedding_dim:
+            return {
+                "question": question,
+                "summary": None,
+                "evidence": [],
+                "error": (
+                    f"Embedding-dimension mismatch: query vector dim={len(qvec)} "
+                    f"but indexed embeddings dim={self.embedding_dim}. "
+                    "Reindex images with the same CLIP model or use a compatible model."
+                )
+            }
+
         filt = where.copy() if where else {}
         if image_id:
             filt["image_id"] = image_id
-        results = self.col.query(
-            query_embeddings=[qvec],
-            n_results=k,
-            where=filt if filt else None,
-        )
+
+        try:
+            results = self.col.query(
+                query_embeddings=[qvec],
+                n_results=k,
+                where=filt if filt else None,
+            )
+        except Exception as e:
+            return {
+                "question": question,
+                "summary": None,
+                "evidence": [],
+                "error": f"Chroma query failed: {e}"
+            }
+
         hits = []
-        for i in range(len(results["ids"][0])):
+        # defensive access to result structure
+        try:
+            ids_list = results.get("ids", [[]])[0]
+            dists = results.get("distances", [[]])[0]
+            metas = results.get("metadatas", [[]])[0]
+            docs = results.get("documents", [[]])[0]
+        except Exception:
+            ids_list = results["ids"][0] if "ids" in results else []
+            dists = results.get("distances", [[]])[0] if "distances" in results else [None] * len(ids_list)
+            metas = results.get("metadatas", [[]])[0] if "metadatas" in results else [None] * len(ids_list)
+            docs = results.get("documents", [[]])[0] if "documents" in results else ["" for _ in ids_list]
+
+        for i in range(len(ids_list)):
             hits.append({
-                "id": results["ids"][0][i],
-                "score": float(results["distances"][0][i]) if "distances" in results else None,
-                "metadata": results["metadatas"][0][i],
-                "ocr_text": results["documents"][0][i],
+                "id": ids_list[i],
+                "score": float(dists[i]) if dists and dists[i] is not None else None,
+                "metadata": metas[i],
+                "ocr_text": docs[i],
             })
         summary = self._summarize_evidence(question, hits)
         return {"question": question, "summary": summary, "evidence": hits}
@@ -361,7 +403,7 @@ class ImageRAG:
             embeddings=[emb],
             metadatas=[{
                 "image_path": image_path,
-                "bbox": list(bbox) if bbox else [0, 0, img.width, img.height],
+                "bbox": _bbox_dict(bbox if bbox else (0, 0, img.width, img.height)),
                 "label": label,
             }],
             documents=[label]
