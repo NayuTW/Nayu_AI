@@ -4,15 +4,14 @@ Restricted to .workspace directory with safety checks for harmful content.
 """
 import os
 import re
-from typing import Optional
 from smolagents import Tool
 
 
 # Common safe file extensions
 ALLOWED_EXTENSIONS = {
     '.py', '.txt', '.md', '.csv', '.json', '.yaml', '.yml',
-    '.html', '.css', '.js', '.xml', '.log', '.sh', '.bat',
-    '.toml', '.ini', '.cfg', '.conf', '.rst', '.tex'
+    '.html', '.css', '.js', '.xml', '.log', '.toml',
+    '.ini', '.cfg', '.conf', '.rst', '.tex'
 }
 
 # Patterns to detect potentially harmful code
@@ -34,8 +33,14 @@ HARMFUL_PATTERNS = [
     # Dangerous imports
     r'import\s+subprocess',
     r'from\s+subprocess',
-    r'import\s+os\s*$',
-    r'from\s+os\s+import',
+    r'import\s+os(?:\s|$|,|;|#)',
+    r'from\s+os\s+import\b',
+    # Additional dangerous patterns
+    r'os\.popen\s*\(',
+    r'os\.spawn',
+    r'compile\s*\(',
+    r'importlib'
+    r'__builtins__',
 ]
 
 # Patterns for potentially sensitive data (warning only)
@@ -104,12 +109,10 @@ class WriteFileSmolTool(Tool):
         if clean_name != filename:
             return False, f"Filename cannot contain path separators. Use '{clean_name}' instead."
         
-        # Check for hidden files (optional - allow for now)
-        # if clean_name.startswith('.'):
-        #     return False, "Hidden files (starting with '.') are not allowed."
-        
         # Check extension
-        _, ext = os.path.splitext(clean_name)
+        _, ext = os.path.splitext(clean_name) 
+        if not ext:
+            return False, "Files must have an extension. Allowed extensions: " + ', '.join(sorted(ALLOWED_EXTENSIONS))
         if ext.lower() not in ALLOWED_EXTENSIONS:
             allowed = ', '.join(sorted(ALLOWED_EXTENSIONS))
             return False, f"File extension '{ext}' not allowed. Allowed: {allowed}"
@@ -158,6 +161,10 @@ class WriteFileSmolTool(Tool):
             Success message or error description
         """
         try:
+            # Require valid mode
+            if mode not in ("write", "append"):
+                return f"Error: Invalid mode '{mode}'. Must be 'write' or 'append'."
+            
             # Validate filename
             is_safe, error_msg = self._check_filename_safe(filename)
             if not is_safe:
@@ -171,10 +178,11 @@ class WriteFileSmolTool(Tool):
             # Construct full path
             filepath = os.path.join(self.workspace_dir, filename)
             
-            # Ensure we're still within workspace (double-check)
-            real_path = os.path.abspath(filepath)
-            if not real_path.startswith(self.workspace_dir):
-                return f"Error: Path '{filepath}' is outside workspace directory"
+            # Ensure we're still within workspace (double-check, resolve symlinks)
+            real_path = os.path.realpath(filepath)
+            workspace_real = os.path.realpath(self.workspace_dir)
+            if not real_path.startswith(workspace_real):
+                return f"Error: Path '{filepath}' resolves outside workspace directory"
             
             # Write file
             file_mode = 'a' if mode == 'append' else 'w'
