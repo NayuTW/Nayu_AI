@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional, Set, Iterable, List
+from typing import Any, Optional, Set, Iterable
 
 import discord
 from discord.ext import commands
@@ -70,12 +70,12 @@ class DiscordBotService:
 
         # Lightweight directory
         # Users
-        self._users_by_id: Dict[int, Dict[str, Any]] = {}  # id -> {username, discriminator, display_name_by_guild:{gid:name}}
-        self._usernames_index: Dict[str, Set[int]] = {}     # lower(username or "name#disc") -> set(ids)
-        self._displaynames_index_by_guild: Dict[int, Dict[str, Set[int]]] = {}  # gid -> lower(display) -> set(ids)
+        self._users_by_id: dict[int, dict[str, Any]] = {}  # id -> {username, discriminator, display_name_by_guild:{gid:name}}
+        self._usernames_index: dict[str, set[int]] = {}     # lower(username or "name#disc") -> set(ids)
+        self._displaynames_index_by_guild: dict[int, dict[str, set[int]]] = {}  # gid -> lower(display) -> set(ids)
         # Channels
-        self._channels_by_id: Dict[int, Dict[str, Any]] = {}  # id -> {name, guild_id}
-        self._channels_by_name_by_guild: Dict[int, Dict[str, int]] = {}  # gid -> lower(name) -> id
+        self._channels_by_id: dict[int, dict[str, Any]] = {}  # id -> {name, guild_id}
+        self._channels_by_name_by_guild: dict[int, dict[str, int]] = {}  # gid -> lower(name) -> id
 
     def _wire_events(self) -> None:
         @self.bot.event
@@ -236,7 +236,7 @@ class DiscordBotService:
         This prevents 'dashboard-only' outputs when we don't intend to reply.
         """
         try:
-            payload: Dict[str, Any] = {
+            payload: dict[str, Any] = {
                 "source": "discord",
                 "user_id": str(message.author.id),
                 "channel_id": str(message.channel.id),
@@ -265,7 +265,7 @@ class DiscordBotService:
         channel_id = str(message.channel.id)
         source = "discord"
 
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "username": str(message.author),
             "display_name": getattr(message.author, "display_name", None),
             "guild_id": message.guild.id if message.guild else None,

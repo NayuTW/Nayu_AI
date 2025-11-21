@@ -6,7 +6,7 @@ import hashlib
 import os
 import re
 import time
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Optional
 from urllib.parse import urlparse, urljoin
 
 import requests
@@ -63,7 +63,7 @@ def _load(path: str) -> Optional[str]:
         return None
 
 
-def _to_markdown(html: str, base_url: str = "") -> Tuple[str, str]:
+def _to_markdown(html: str, base_url: str = "") -> tuple[str, str]:
     """Convert HTML to markdown with readability extraction."""
     try:
         doc = Document(html)
@@ -105,7 +105,7 @@ def _requests_fetch(url: str, timeout: int = 15) -> str:
     return r.text
 
 
-def _selenium_html(url: str, wait_ms: int = 1500, viewport: Tuple[int, int] = (1200, 1600)) -> str:
+def _selenium_html(url: str, wait_ms: int = 1500, viewport: tuple[int, int] = (1200, 1600)) -> str:
     """Fetch HTML using Selenium (dynamic pages with JavaScript)."""
     options = ChromeOptions()
     options.add_argument("--headless=new")
@@ -146,7 +146,7 @@ def _static_or_dynamic(url: str, mode: str = "auto") -> str:
     return html
 
 
-def _ddg_search(query: str, max_results: int = 6) -> List[Dict[str, str]]:
+def _ddg_search(query: str, max_results: int = 6) -> list[dict[str, str]]:
     """Search using DuckDuckGo."""
     results = []
     with DDGS() as ddgs:
@@ -190,7 +190,7 @@ class EmbeddingRanker:
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
         self.emb = LocalEmbedder(model_name=model_name, lazy_load=True)
 
-    def score(self, query: str, candidates: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+    def score(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
         texts = [((c.get("title") or "") + " " + (c.get("body") or "")).strip() for c in candidates]
         qv = self.emb.embed_text(query)
         cvs = self.emb.embed_texts(texts)
@@ -307,7 +307,7 @@ class WebBrowserTool:
             self.browser = await pw.chromium.launch(headless=True)
             self.page = await self.browser.new_page()
 
-    async def _handle_search(self, query: str, max_results: int = 5) -> Dict[str, Any]:
+    async def _handle_search(self, query: str, max_results: int = 5) -> dict[str, Any]:
         """Handle search action."""
         results = _ddg_search(query, max_results=max_results)
         summary = f"Found {len(results)} search results for: {query}"
@@ -321,7 +321,7 @@ class WebBrowserTool:
             "sources": results
         }
 
-    async def _handle_fetch(self, url: str, mode: str = "auto", char_limit: int = 1200) -> Dict[str, Any]:
+    async def _handle_fetch(self, url: str, mode: str = "auto", char_limit: int = 1200) -> dict[str, Any]:
         """Handle fetch action."""
         try:
             html = await asyncio.to_thread(_static_or_dynamic, url, mode)
@@ -348,7 +348,7 @@ class WebBrowserTool:
         max_results: int = 5,
         top_k: int = 3,
         char_limit: int = 1200
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Handle browse action."""
         try:
             # Search and rank results
@@ -387,7 +387,7 @@ class WebBrowserTool:
                 "delta": {"last_observation": summary}
             }
 
-    async def _handle_goto(self, url: str) -> Dict[str, Any]:
+    async def _handle_goto(self, url: str) -> dict[str, Any]:
         """Handle goto action (interactive navigation)."""
         await self._ensure_browser()
         await self.page.goto(url)
@@ -404,7 +404,7 @@ class WebBrowserTool:
         text: str = "",
         selector: str = "",
         input: str = ""
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Handle interactive browser actions."""
         await self._ensure_browser()
         summary = ""
@@ -443,7 +443,7 @@ class WebBrowserTool:
         text: str = "",
         selector: str = "",
         input: str = ""
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Main entry point for the tool."""
         try:
             if action == "search":

@@ -3,14 +3,14 @@ MemoryTool converted to smolagents Tool class.
 Uses Chroma with local embeddings for long-term memory.
 """
 import re
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 import chromadb
 from smolagents import Tool
 
 from src.agents.embeddings.local_embedder import LocalEmbedder
 
 
-def _chunk_text(text: str, max_chars: int = 900, overlap: int = 120) -> List[str]:
+def _chunk_text(text: str, max_chars: int = 900, overlap: int = 120) -> list[str]:
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) <= max_chars:
         return [text]
@@ -93,7 +93,7 @@ class MemorySmolTool(Tool):
         digest = " | ".join(items[:4])
         return digest
     
-    def _add_chunks(self, base_id: str, chunks: List[str], metadata: Optional[Dict[str, Any]] = None) -> int:
+    def _add_chunks(self, base_id: str, chunks: list[str], metadata: Optional[dict[str, Any]] = None) -> int:
         """Add chunks with batch embedding."""
         if not chunks:
             return 0
@@ -112,7 +112,7 @@ class MemorySmolTool(Tool):
         text: Optional[str] = None,
         k: int = 4,
         doc_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[dict[str, Any]] = None
     ) -> str:
         """Execute memory action and return formatted result."""
         if action == "remember":

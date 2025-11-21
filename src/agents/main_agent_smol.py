@@ -6,7 +6,7 @@ import asyncio
 import numpy as np
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from smolagents import CodeAgent
 from fastembed import TextEmbedding
@@ -287,7 +287,7 @@ class MainAgentSmol:
             traceback.print_exc()
             return False
 
-    def _select_relevant_tools(self, user_text: str, max_tools: int = 6) -> List[str]:
+    def _select_relevant_tools(self, user_text: str, max_tools: int = 6) -> list[str]:
         """Select only relevant tools to reduce prompt size.
 
         Uses cosine similarity in the original embedding space rather than PCA.
@@ -334,7 +334,7 @@ class MainAgentSmol:
         self,
         user_text: str,
         source: str = "cli",
-        external_metadata: Optional[Dict[str, Any]] = None,
+        external_metadata: Optional[dict[str, Any]] = None,
         user_id: Optional[str] = None,
         channel_id: Optional[str] = None,
         session_id: Optional[str] = None,
@@ -492,7 +492,7 @@ Respond naturally and use tools only if needed. You can reference previous messa
         user_id: str,
         channel_id: str,
         source: str,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
     ) -> Optional[str]:
         """
         Entry point for external adapters (Discord, etc.).
@@ -532,16 +532,16 @@ Respond naturally and use tools only if needed. You can reference previous messa
         target_session = session_id or self.session_id
         self.session_manager.reset_session(target_session)
     
-    def list_sessions(self) -> List[str]:
+    def list_sessions(self) -> list[str]:
         """List all available sessions."""
         return self.session_manager.list_sessions()
     
     def update_working_set(
         self,
         session_id: Optional[str] = None,
-        task_info: Optional[Dict[str, Any]] = None,
-        artifacts: Optional[Dict[str, Any]] = None,
-        env_context: Optional[Dict[str, Any]] = None
+        task_info: Optional[dict[str, Any]] = None,
+        artifacts: Optional[dict[str, Any]] = None,
+        env_context: Optional[dict[str, Any]] = None
     ):
         """
         Update the working set for a session.
