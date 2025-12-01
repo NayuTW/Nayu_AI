@@ -3,7 +3,7 @@ import os
 import sqlite3
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 DEFAULT_DB_PATH = ".cache/agent_control_center.sqlite3"
 os.makedirs(".cache", exist_ok=True)
@@ -60,10 +60,10 @@ class SQLiteStore:
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(SCHEMA)
         self._lock = threading.Lock()
-        self._event_buffer: List[tuple] = []
+        self._event_buffer: list[tuple] = []
         self._buffer_size = 10
 
-    def append_event(self, type_: str, payload: Dict[str, Any], ts: Optional[float] = None) -> Optional[int]:
+    def append_event(self, type_: str, payload: dict[str, Any], ts: Optional[float] = None) -> Optional[int]:
         """
         Append event to buffer for batch insertion.
         Returns None since actual ID is assigned during flush.
@@ -100,7 +100,7 @@ class SQLiteStore:
         with self._lock:
             self._flush_events()
 
-    def get_recent_events(self, limit: int = 200) -> List[Dict[str, Any]]:
+    def get_recent_events(self, limit: int = 200) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT id, ts, type, payload FROM events ORDER BY id DESC LIMIT ?",
@@ -115,7 +115,7 @@ class SQLiteStore:
             out.append({"id": rid, "ts": ts, "type": typ, "payload": p})
         return out
 
-    def upsert_tool_stats(self, stats: Dict[str, Any]):
+    def upsert_tool_stats(self, stats: dict[str, Any]):
         row = (
             stats["tool_name"],
             1 if stats["enabled"] else 0,
@@ -145,7 +145,7 @@ class SQLiteStore:
                 row,
             )
 
-    def get_all_tool_stats(self) -> List[Dict[str, Any]]:
+    def get_all_tool_stats(self) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(
                 """
@@ -185,7 +185,7 @@ class SQLiteStore:
             return default
         return row[0]
 
-    def append_example(self, session_id: str, user_text: str, assistant_text: str, meta: Dict[str, Any], ts: Optional[float] = None) -> int:
+    def append_example(self, session_id: str, user_text: str, assistant_text: str, meta: dict[str, Any], ts: Optional[float] = None) -> int:
         ts = ts or time.time()
         meta_json = json.dumps(meta, ensure_ascii=False)
         with self._lock, self._conn:
@@ -203,7 +203,7 @@ class SQLiteStore:
         with self._lock, self._conn:
             self._conn.execute("UPDATE fine_tune_examples SET label=? WHERE id=?", (label, example_id))
 
-    def get_recent_examples(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_recent_examples(self, limit: int = 50) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(
                 """
@@ -214,7 +214,7 @@ class SQLiteStore:
                 """,
                 (limit,),
             ).fetchall()
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for rid, ts, sid, u, a, m, lab in rows:
             try:
                 meta = json.loads(m)

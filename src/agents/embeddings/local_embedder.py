@@ -1,6 +1,6 @@
 from __future__ import annotations
 import math
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
 from functools import lru_cache
 
 class LocalEmbedder:
@@ -40,11 +40,11 @@ class LocalEmbedder:
                 raise
             self._fe_model = None
 
-    def _l2(self, v: List[float]) -> List[float]:
+    def _l2(self, v: list[float]) -> list[float]:
         s = math.sqrt(sum(x * x for x in v)) or 1.0
         return [x / s for x in v]
 
-    def _embed_texts_internal(self, texts: List[str]) -> List[List[float]]:
+    def _embed_texts_internal(self, texts: list[str]) -> list[list[float]]:
         """Internal method for embedding without caching."""
         if not texts:
             return []
@@ -54,7 +54,7 @@ class LocalEmbedder:
             vecs = self._st_model.encode(texts, normalize_embeddings=False, show_progress_bar=False).tolist()
         return [self._l2(v) for v in vecs]
 
-    def embed_texts(self, texts: Iterable[str]) -> List[List[float]]:
+    def embed_texts(self, texts: Iterable[str]) -> list[list[float]]:
         """Embed multiple texts. Initializes model on first call."""
         self._init_backend()
         texts_list = list(texts)
@@ -67,7 +67,7 @@ class LocalEmbedder:
         result = self._embed_texts_internal([text])[0]
         return tuple(result)
 
-    def embed_text(self, text: str) -> List[float]:
+    def embed_text(self, text: str) -> list[float]:
         """
         Embed single text and return as list.
         Uses internal caching for improved performance on repeated queries.

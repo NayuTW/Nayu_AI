@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 from smolagents import Tool
 
 class DiscordSendChannelTool(Tool):
@@ -17,7 +17,7 @@ class DiscordSendChannelTool(Tool):
         super().__init__()
         self.discord = discord_service
 
-    def forward(self, text: str, channel_id: str = "", target: str = "", guild_id: int = 0) -> Dict[str, str]:
+    def forward(self, text: str, channel_id: str = "", target: str = "", guild_id: int = 0) -> dict[str, str]:
         text = (text or "").strip()
         if not text:
             return {"summary": "No text provided."}

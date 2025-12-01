@@ -5,7 +5,7 @@ Controls keyboard, mouse, and takes screenshots.
 import time
 import os
 import platform
-from typing import Dict, Any, Optional, List
+from typing import Any, Optional
 from smolagents import Tool
 
 try:
@@ -187,7 +187,7 @@ class DesktopSmolTool(Tool):
         y: Optional[float] = None,
         text: Optional[str] = None,
         key: Optional[str] = None,
-        keys: Optional[List[str]] = None,
+        keys: Optional[list[str]] = None,
         seconds: Optional[float] = None
     ) -> str:
         """Execute desktop action and return result description."""

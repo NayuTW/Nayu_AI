@@ -14,7 +14,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +25,15 @@ class Message:
     role: str  # "user" or "assistant"
     content: str
     timestamp: float
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class WorkingSet:
     """Working set memory for task and artifact tracking."""
-    last_task: Dict[str, Any] = field(default_factory=dict)
-    artifacts: Dict[str, Any] = field(default_factory=dict)
-    env_context: Dict[str, Any] = field(default_factory=dict)
+    last_task: dict[str, Any] = field(default_factory=dict)
+    artifacts: dict[str, Any] = field(default_factory=dict)
+    env_context: dict[str, Any] = field(default_factory=dict)
     
     def update_task(self, task_id: str, task_type: str, outcome: str):
         """Update the last task information."""
@@ -72,7 +72,7 @@ class WorkingSet:
 class SessionState:
     """State for a single session."""
     session_id: str
-    messages: List[Message] = field(default_factory=list)
+    messages: list[Message] = field(default_factory=list)
     summary: str = ""
     working_set: WorkingSet = field(default_factory=WorkingSet)
     last_updated: float = field(default_factory=time.time)
@@ -213,7 +213,7 @@ class SessionManager:
         session_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[dict[str, Any]] = None
     ):
         """
         Add a message to the session.
@@ -249,7 +249,7 @@ class SessionManager:
         # Save to disk (write-through cache)
         self._save_session_to_disk(state)
     
-    def _estimate_tokens(self, messages: List[Message]) -> int:
+    def _estimate_tokens(self, messages: list[Message]) -> int:
         """Estimate token count for messages. Rough estimate: 1 token ≈ 4 characters."""
         total_chars = sum(len(m.content) for m in messages)
         return total_chars // 4
@@ -302,7 +302,7 @@ class SessionManager:
             
             state.summary = new_summary
     
-    def get_context(self, session_id: str) -> Tuple[str, str, List[Message]]:
+    def get_context(self, session_id: str) -> tuple[str, str, list[Message]]:
         """
         Get the full context for a session.
         
@@ -320,9 +320,9 @@ class SessionManager:
     def update_working_set(
         self,
         session_id: str,
-        task_info: Optional[Dict[str, Any]] = None,
-        artifacts: Optional[Dict[str, Any]] = None,
-        env_context: Optional[Dict[str, Any]] = None
+        task_info: Optional[dict[str, Any]] = None,
+        artifacts: Optional[dict[str, Any]] = None,
+        env_context: Optional[dict[str, Any]] = None
     ):
         """
         Update the working set for a session.
@@ -369,7 +369,7 @@ class SessionManager:
         if path.exists():
             path.unlink()
     
-    def list_sessions(self) -> List[str]:
+    def list_sessions(self) -> list[str]:
         """List all available sessions."""
         return [
             p.stem for p in self.session_dir.glob("*.json")
