@@ -287,7 +287,7 @@ class MainAgentSmol:
             print(f"Warning: Could not initialize ImageRAG tools: {e}")
             print("  Vision RAG features will not be available")
             print("  To enable, install: pip install open_clip_torch rapidocr-onnxruntime")
-
+        
     def add_discord_tool(self, discord_service):
         """
         Add Discord tool to the agent after initialization.
