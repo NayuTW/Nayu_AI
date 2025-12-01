@@ -27,7 +27,7 @@ class HealthChecker:
             await self.bus.publish("health.update", status)
             await asyncio.sleep(self.interval_s)
 
-    async def _gather(self) -> Dict:
+    async def _gather(self) -> dict:
         status: dict[str, dict] = {}
 
         try:
