@@ -72,7 +72,6 @@ class DummyStore:
 
 class DummyEmbedder:
     def encode(self, text):
-        import numpy as np
         return np.zeros(3)
 
 

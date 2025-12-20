@@ -236,14 +236,15 @@ class MainAgentSmol:
         try:
             if hasattr(self, "agent") and getattr(self.agent, "step_callbacks", None):
                 self.agent.step_callbacks.register(ActionStep, self._capture_action_step)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Could not register ActionStep callback: {e}")
 
     def _capture_action_step(self, step: ActionStep, agent=None):
         """Store the latest ActionStep for multi-step visibility."""
         try:
             step_dict = step.dict()
-        except Exception:
+        except Exception as e:
+            print(f"Warning: Failed to serialize ActionStep: {e}")
             step_dict = {"step_number": getattr(step, "step_number", None)}
         self._latest_action_steps.append(self._ensure_jsonable(step_dict))
         observation = self._extract_last_observation([step_dict])
@@ -454,11 +455,8 @@ Respond naturally and use tools only if needed. You can reference previous messa
             
             if isinstance(run_output, RunResult):
                 action_steps = self._sanitize_steps(run_output.steps or [])
-                if self._latest_action_steps:
-                    if action_steps:
-                        self._latest_action_steps.extend(action_steps)
-                else:
-                    self._latest_action_steps = action_steps
+                if action_steps:
+                    self._latest_action_steps.extend(action_steps)
             if self._latest_action_steps:
                 last_obs = self._extract_last_observation(self._latest_action_steps)
                 if last_obs:
