@@ -8,22 +8,6 @@ from smolagents import ActionStep, RunResult
 from smolagents.memory import Timing
 
 
-class _DummySentenceTransformer:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def encode(self, text):
-        return np.zeros(3)
-
-
-sys.modules["sentence_transformers"] = types.SimpleNamespace(SentenceTransformer=_DummySentenceTransformer)
-pairwise_module = types.SimpleNamespace(cosine_similarity=lambda a, b: np.array([[1.0]]))
-sys.modules["sklearn"] = types.SimpleNamespace(metrics=types.SimpleNamespace(pairwise=pairwise_module))
-sys.modules["sklearn.metrics"] = types.SimpleNamespace(pairwise=pairwise_module)
-sys.modules["sklearn.metrics.pairwise"] = pairwise_module
-sys.modules["litellm"] = types.SimpleNamespace(completion=lambda **_kwargs: None)
-
-
 class _DummyTool:
     def __init__(self, *args, **kwargs):
         self.name = kwargs.get("name", "dummy")
@@ -35,20 +19,33 @@ class _DummyTool:
         return {}
 
 
-sys.modules["src.agents.tools.webbrowser_smol"] = types.SimpleNamespace(WebBrowserSmolTool=_DummyTool)
-sys.modules["src.agents.tools.desktop_smol"] = types.SimpleNamespace(DesktopSmolTool=_DummyTool)
-sys.modules["src.agents.tools.vision_smol"] = types.SimpleNamespace(VisionSmolTool=_DummyTool)
-sys.modules["src.agents.tools.memory_smol"] = types.SimpleNamespace(MemorySmolTool=_DummyTool)
-sys.modules["src.agents.tools.speech_smol"] = types.SimpleNamespace(SpeechSmolTool=_DummyTool)
-sys.modules["src.agents.tools.codeagent"] = types.SimpleNamespace(CodeAgentTool=_DummyTool)
-sys.modules["src.agents.tools.app_launcher_smol"] = types.SimpleNamespace(AppLauncherSmolTool=_DummyTool)
+class _DummySentenceTransformer:
+    def __init__(self, *args, **kwargs):
+        pass
 
-from src.agents.main_agent_smol import MainAgentSmol
-from src.agents.state import SharedState
-from src.agents.core.events import EventBus
-from src.agents.core.registry import ToolRegistry
-from src.agents.notify.notifier import Notifier
-from src.agents.memory.session_manager import SessionManager
+    def encode(self, text):
+        return np.zeros(3)
+
+
+@pytest.fixture(autouse=True)
+def stub_external_modules(monkeypatch):
+    pairwise_module = types.SimpleNamespace(cosine_similarity=lambda a, b: np.array([[1.0]]))
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        types.SimpleNamespace(SentenceTransformer=_DummySentenceTransformer),
+    )
+    monkeypatch.setitem(sys.modules, "sklearn", types.SimpleNamespace(metrics=types.SimpleNamespace(pairwise=pairwise_module)))
+    monkeypatch.setitem(sys.modules, "sklearn.metrics", types.SimpleNamespace(pairwise=pairwise_module))
+    monkeypatch.setitem(sys.modules, "sklearn.metrics.pairwise", pairwise_module)
+    monkeypatch.setitem(sys.modules, "litellm", types.SimpleNamespace(completion=lambda **_kwargs: None))
+    monkeypatch.setitem(sys.modules, "src.agents.tools.webbrowser_smol", types.SimpleNamespace(WebBrowserSmolTool=_DummyTool))
+    monkeypatch.setitem(sys.modules, "src.agents.tools.desktop_smol", types.SimpleNamespace(DesktopSmolTool=_DummyTool))
+    monkeypatch.setitem(sys.modules, "src.agents.tools.vision_smol", types.SimpleNamespace(VisionSmolTool=_DummyTool))
+    monkeypatch.setitem(sys.modules, "src.agents.tools.memory_smol", types.SimpleNamespace(MemorySmolTool=_DummyTool))
+    monkeypatch.setitem(sys.modules, "src.agents.tools.speech_smol", types.SimpleNamespace(SpeechSmolTool=_DummyTool))
+    monkeypatch.setitem(sys.modules, "src.agents.tools.codeagent", types.SimpleNamespace(CodeAgentTool=_DummyTool))
+    monkeypatch.setitem(sys.modules, "src.agents.tools.app_launcher_smol", types.SimpleNamespace(AppLauncherSmolTool=_DummyTool))
 
 
 class DummyStore:
@@ -96,6 +93,13 @@ class FakeAgent:
 
 
 def test_handle_user_message_collects_action_steps():
+    from src.agents.core.events import EventBus
+    from src.agents.core.registry import ToolRegistry
+    from src.agents.main_agent_smol import MainAgentSmol
+    from src.agents.memory.session_manager import SessionManager
+    from src.agents.notify.notifier import Notifier
+    from src.agents.state import SharedState
+
     store = DummyStore()
     bus = EventBus(store=store)
     registry = ToolRegistry(store=store)
@@ -123,7 +127,6 @@ def test_handle_user_message_collects_action_steps():
         timing=Timing(0, 0),
     )
     agent.agent = FakeAgent(run_result)
-    agent._register_action_step_callback()
 
     response = asyncio.run(agent.handle_user_message("hello", source="test"))
 

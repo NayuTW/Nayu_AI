@@ -4,7 +4,6 @@ This replaces the custom LLM-based orchestrator with smolagents' built-in CodeAg
 """
 import asyncio
 import inspect
-import json
 import numpy as np
 import os
 import time
@@ -245,7 +244,7 @@ class MainAgentSmol:
         """Store the latest ActionStep for multi-step visibility."""
         try:
             step_dict = step.dict()
-        except Exception as e:
+        except (AttributeError, TypeError, ValueError) as e:
             print(f"Warning: Failed to serialize ActionStep: {e}")
             step_dict = vars(step) if hasattr(step, "__dict__") else {}
             if not step_dict:
@@ -268,11 +267,9 @@ class MainAgentSmol:
             return [self._ensure_jsonable(v) for v in data]
         if isinstance(data, (bytes, bytearray)):
             return data.hex()
-        try:
-            json.dumps(data)
+        if isinstance(data, (str, int, float, bool)) or data is None:
             return data
-        except TypeError:
-            return str(data)
+        return str(data)
 
     def _extract_last_observation(self, steps: List[Dict[str, Any]]) -> Optional[str]:
         """Extract the most recent observation or tool output from steps."""
