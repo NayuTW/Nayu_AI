@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import types
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -39,13 +40,17 @@ def stub_external_modules(monkeypatch):
     monkeypatch.setitem(sys.modules, "sklearn.metrics", types.SimpleNamespace(pairwise=pairwise_module))
     monkeypatch.setitem(sys.modules, "sklearn.metrics.pairwise", pairwise_module)
     monkeypatch.setitem(sys.modules, "litellm", types.SimpleNamespace(completion=lambda **_kwargs: None))
-    monkeypatch.setitem(sys.modules, "src.agents.tools.webbrowser_smol", types.SimpleNamespace(WebBrowserSmolTool=_DummyTool))
-    monkeypatch.setitem(sys.modules, "src.agents.tools.desktop_smol", types.SimpleNamespace(DesktopSmolTool=_DummyTool))
-    monkeypatch.setitem(sys.modules, "src.agents.tools.vision_smol", types.SimpleNamespace(VisionSmolTool=_DummyTool))
-    monkeypatch.setitem(sys.modules, "src.agents.tools.memory_smol", types.SimpleNamespace(MemorySmolTool=_DummyTool))
-    monkeypatch.setitem(sys.modules, "src.agents.tools.speech_smol", types.SimpleNamespace(SpeechSmolTool=_DummyTool))
-    monkeypatch.setitem(sys.modules, "src.agents.tools.codeagent", types.SimpleNamespace(CodeAgentTool=_DummyTool))
-    monkeypatch.setitem(sys.modules, "src.agents.tools.app_launcher_smol", types.SimpleNamespace(AppLauncherSmolTool=_DummyTool))
+    tool_modules = {
+        "src.agents.tools.webbrowser_smol": "WebBrowserSmolTool",
+        "src.agents.tools.desktop_smol": "DesktopSmolTool",
+        "src.agents.tools.vision_smol": "VisionSmolTool",
+        "src.agents.tools.memory_smol": "MemorySmolTool",
+        "src.agents.tools.speech_smol": "SpeechSmolTool",
+        "src.agents.tools.codeagent": "CodeAgentTool",
+        "src.agents.tools.app_launcher_smol": "AppLauncherSmolTool",
+    }
+    for module_name, cls_name in tool_modules.items():
+        monkeypatch.setitem(sys.modules, module_name, types.SimpleNamespace(**{cls_name: _DummyTool}))
 
 
 class DummyStore:
@@ -105,7 +110,8 @@ def test_handle_user_message_collects_action_steps():
     registry = ToolRegistry(store=store)
     notifier = Notifier(speech_tool=None, voice_enabled=False, speak_on_error=False)
 
-    agent = MainAgentSmol.__new__(MainAgentSmol)
+    with patch.object(MainAgentSmol, "__init__", return_value=None):
+        agent = MainAgentSmol(state=None, bus=None, registry=None, notifier=None, store=None, session_id="stub")
     agent.state = SharedState()
     agent.bus = bus
     agent.registry = registry

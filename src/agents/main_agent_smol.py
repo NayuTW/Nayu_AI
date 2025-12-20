@@ -242,14 +242,19 @@ class MainAgentSmol:
 
     def _capture_action_step(self, step: ActionStep, agent=None):
         """Store the latest ActionStep for multi-step visibility."""
+        step_dict: Dict[str, Any] = {}
         try:
-            step_dict = step.dict()
+            if hasattr(step, "dict"):
+                step_dict = step.dict()
+            elif hasattr(step, "model_dump"):
+                step_dict = step.model_dump()
+            else:
+                step_dict = vars(step) if hasattr(step, "__dict__") else {}
         except (AttributeError, TypeError, ValueError) as e:
             print(f"Warning: Failed to serialize ActionStep: {e}")
-            step_dict = vars(step) if hasattr(step, "__dict__") else {}
-            if not step_dict:
-                fields = ("step_number", "timing", "observations", "action_output")
-                step_dict = {field: getattr(step, field, None) for field in fields}
+        if not step_dict:
+            fields = ("step_number", "timing", "observations", "action_output")
+            step_dict = {field: getattr(step, field, None) for field in fields}
         self._latest_action_steps.append(self._ensure_jsonable(step_dict))
         observation = self._extract_last_observation([step_dict])
         if observation:
