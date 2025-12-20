@@ -245,7 +245,12 @@ class MainAgentSmol:
             step_dict = step.dict()
         except Exception as e:
             print(f"Warning: Failed to serialize ActionStep: {e}")
-            step_dict = {"step_number": getattr(step, "step_number", None)}
+            step_dict = {
+                "step_number": getattr(step, "step_number", None),
+                "timing": getattr(step, "timing", None),
+                "observations": getattr(step, "observations", None),
+                "action_output": getattr(step, "action_output", None),
+            }
         self._latest_action_steps.append(self._ensure_jsonable(step_dict))
         observation = self._extract_last_observation([step_dict])
         if observation:
@@ -257,11 +262,7 @@ class MainAgentSmol:
 
     def _ensure_jsonable(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert non-serializable values to strings."""
-        try:
-            json.dumps(data)
-            return data
-        except TypeError:
-            return json.loads(json.dumps(data, default=str))
+        return json.loads(json.dumps(data, default=str))
 
     def _extract_last_observation(self, steps: List[Dict[str, Any]]) -> Optional[str]:
         """Extract the most recent observation or tool output from steps."""
@@ -443,11 +444,14 @@ Respond naturally and use tools only if needed. You can reference previous messa
             self._latest_action_steps = []
             
             # Use standard agent for now (tool selection can be enabled later)
-            run_output = await asyncio.to_thread(
-                self.agent.run,
-                full_prompt,
-                return_full_result=True,
-            )
+            try:
+                run_output = await asyncio.to_thread(
+                    self.agent.run,
+                    full_prompt,
+                    return_full_result=True,
+                )
+            except TypeError:
+                run_output = await asyncio.to_thread(self.agent.run, full_prompt)
             
             latency_ms = (time.time() - t0) * 1000
             print(f"Agent response time: {latency_ms:.0f}ms")
