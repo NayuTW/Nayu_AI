@@ -3,6 +3,7 @@ Main Agent using smolagents CodeAgent for orchestration.
 This replaces the custom LLM-based orchestrator with smolagents' built-in CodeAgent.
 """
 import asyncio
+import inspect
 import json
 import numpy as np
 import os
@@ -234,8 +235,9 @@ class MainAgentSmol:
     def _register_action_step_callback(self):
         """Register a callback to capture smolagents ActionStep data."""
         try:
-            if hasattr(self, "agent") and getattr(self.agent, "step_callbacks", None):
-                self.agent.step_callbacks.register(ActionStep, self._capture_action_step)
+            callbacks = getattr(self.agent, "step_callbacks", None)
+            if callbacks:
+                callbacks.register(ActionStep, self._capture_action_step)
         except Exception as e:
             print(f"Warning: Could not register ActionStep callback: {e}")
 
@@ -245,12 +247,8 @@ class MainAgentSmol:
             step_dict = step.dict()
         except Exception as e:
             print(f"Warning: Failed to serialize ActionStep: {e}")
-            step_dict = {
-                "step_number": getattr(step, "step_number", None),
-                "timing": getattr(step, "timing", None),
-                "observations": getattr(step, "observations", None),
-                "action_output": getattr(step, "action_output", None),
-            }
+            fields = ("step_number", "timing", "observations", "action_output")
+            step_dict = {field: getattr(step, field, None) for field in fields}
         self._latest_action_steps.append(self._ensure_jsonable(step_dict))
         observation = self._extract_last_observation([step_dict])
         if observation:
@@ -262,7 +260,17 @@ class MainAgentSmol:
 
     def _ensure_jsonable(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert non-serializable values to strings."""
-        return json.loads(json.dumps(data, default=str))
+        if isinstance(data, dict):
+            return {k: self._ensure_jsonable(v) for k, v in data.items()}
+        if isinstance(data, list):
+            return [self._ensure_jsonable(v) for v in data]
+        if isinstance(data, (bytes, bytearray)):
+            return data.hex()
+        try:
+            json.dumps(data)
+            return data
+        except TypeError:
+            return str(data)
 
     def _extract_last_observation(self, steps: List[Dict[str, Any]]) -> Optional[str]:
         """Extract the most recent observation or tool output from steps."""
@@ -444,14 +452,10 @@ Respond naturally and use tools only if needed. You can reference previous messa
             self._latest_action_steps = []
             
             # Use standard agent for now (tool selection can be enabled later)
-            try:
-                run_output = await asyncio.to_thread(
-                    self.agent.run,
-                    full_prompt,
-                    return_full_result=True,
-                )
-            except TypeError:
-                run_output = await asyncio.to_thread(self.agent.run, full_prompt)
+            run_kwargs = {}
+            if "return_full_result" in inspect.signature(self.agent.run).parameters:
+                run_kwargs["return_full_result"] = True
+            run_output = await asyncio.to_thread(self.agent.run, full_prompt, **run_kwargs)
             
             latency_ms = (time.time() - t0) * 1000
             print(f"Agent response time: {latency_ms:.0f}ms")
