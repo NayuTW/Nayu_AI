@@ -3,12 +3,13 @@ Main Agent using smolagents CodeAgent for orchestration.
 This replaces the custom LLM-based orchestrator with smolagents' built-in CodeAgent.
 """
 import asyncio
+import json
 import numpy as np
 import os
 import time
 from typing import Any, Dict, List, Optional
 
-from smolagents import CodeAgent
+from smolagents import ActionStep, CodeAgent, RunResult
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -84,6 +85,7 @@ class MainAgentSmol:
         self.store = store
         self.session_id = session_id
         self.os_context = ""  # Will be populated when desktop tool is initialized
+        self._latest_action_steps: List[Dict[str, Any]] = []
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -118,6 +120,7 @@ class MainAgentSmol:
                 "bs4", "duckduckgo_search", "readability", "html2text"
             ]
         )
+        self._register_action_step_callback()
 
         # Lightweight embedding model for tool selection
         print("Loading tool embedder (this may take a moment on first run)...")
@@ -228,6 +231,45 @@ class MainAgentSmol:
         except Exception as e:
             print(f"Warning: Could not initialize codeexec tool: {e}")
     
+    def _register_action_step_callback(self):
+        """Register a callback to capture smolagents ActionStep data."""
+        try:
+            if hasattr(self, "agent") and getattr(self.agent, "step_callbacks", None):
+                self.agent.step_callbacks.register(ActionStep, self._capture_action_step)
+        except Exception:
+            pass
+
+    def _capture_action_step(self, step: ActionStep, agent=None):
+        """Store the latest ActionStep for multi-step visibility."""
+        try:
+            step_dict = step.dict()
+        except Exception:
+            step_dict = {"step_number": getattr(step, "step_number", None)}
+        self._latest_action_steps.append(self._ensure_jsonable(step_dict))
+        observation = self._extract_last_observation([step_dict])
+        if observation:
+            self.state.last_observation = observation
+
+    def _sanitize_steps(self, steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Ensure steps are JSON serializable for storage and events."""
+        return [self._ensure_jsonable(step) for step in steps] if steps else []
+
+    def _ensure_jsonable(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert non-serializable values to strings."""
+        try:
+            json.dumps(data)
+            return data
+        except TypeError:
+            return json.loads(json.dumps(data, default=str))
+
+    def _extract_last_observation(self, steps: List[Dict[str, Any]]) -> Optional[str]:
+        """Extract the most recent observation or tool output from steps."""
+        for step in reversed(steps or []):
+            obs = step.get("observations") or step.get("action_output")
+            if obs:
+                return obs if isinstance(obs, str) else str(obs)
+        return None
+    
     def add_discord_tool(self, discord_service):
         """
         Add Discord tool to the agent after initialization.
@@ -265,6 +307,7 @@ class MainAgentSmol:
                     "bs4", "duckduckgo_search", "readability", "html2text"
                 ]
             )
+            self._register_action_step_callback()
             
             # Also register in registry for tracking
             self.registry.register("discord", discord_tool, {
@@ -396,15 +439,41 @@ Respond naturally and use tools only if needed. You can reference previous messa
 
         try:
             t0 = time.time()
+            self._latest_action_steps = []
             
             # Use standard agent for now (tool selection can be enabled later)
-            result = await asyncio.to_thread(self.agent.run, full_prompt)
+            run_output = await asyncio.to_thread(
+                self.agent.run,
+                full_prompt,
+                return_full_result=True,
+            )
             
             latency_ms = (time.time() - t0) * 1000
             print(f"Agent response time: {latency_ms:.0f}ms")
+            result = run_output.output if isinstance(run_output, RunResult) else run_output
+            
+            if isinstance(run_output, RunResult):
+                action_steps = self._sanitize_steps(run_output.steps or [])
+                if self._latest_action_steps:
+                    if action_steps:
+                        self._latest_action_steps.extend(action_steps)
+                else:
+                    self._latest_action_steps = action_steps
+            if self._latest_action_steps:
+                last_obs = self._extract_last_observation(self._latest_action_steps)
+                if last_obs:
+                    self.state.last_observation = last_obs
+                await self.bus.publish("agent.steps", {
+                    "session_id": active_session_id,
+                    "steps": self._latest_action_steps
+                })
             
             # Clean up result if it's empty or contains code
-            if not result or not result.strip():
+            if result is None:
+                result = ""
+            if not isinstance(result, str):
+                result = str(result)
+            if not result.strip():
                 result = "I processed your request."
             
             # Add assistant response to session
