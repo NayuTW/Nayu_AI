@@ -247,8 +247,10 @@ class MainAgentSmol:
             step_dict = step.dict()
         except Exception as e:
             print(f"Warning: Failed to serialize ActionStep: {e}")
-            fields = ("step_number", "timing", "observations", "action_output")
-            step_dict = {field: getattr(step, field, None) for field in fields}
+            step_dict = vars(step) if hasattr(step, "__dict__") else {}
+            if not step_dict:
+                fields = ("step_number", "timing", "observations", "action_output")
+                step_dict = {field: getattr(step, field, None) for field in fields}
         self._latest_action_steps.append(self._ensure_jsonable(step_dict))
         observation = self._extract_last_observation([step_dict])
         if observation:
@@ -258,7 +260,7 @@ class MainAgentSmol:
         """Ensure steps are JSON serializable for storage and events."""
         return [self._ensure_jsonable(step) for step in steps] if steps else []
 
-    def _ensure_jsonable(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _ensure_jsonable(self, data: Any) -> Any:
         """Convert non-serializable values to strings."""
         if isinstance(data, dict):
             return {k: self._ensure_jsonable(v) for k, v in data.items()}
@@ -466,13 +468,13 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 if action_steps:
                     self._latest_action_steps.extend(action_steps)
             if self._latest_action_steps:
-                last_obs = self._extract_last_observation(self._latest_action_steps)
-                if last_obs:
-                    self.state.last_observation = last_obs
                 await self.bus.publish("agent.steps", {
                     "session_id": active_session_id,
                     "steps": self._latest_action_steps
                 })
+                last_obs = self._extract_last_observation(self._latest_action_steps)
+                if last_obs:
+                    self.state.last_observation = last_obs
             
             # Clean up result if it's empty or contains code
             if result is None:
