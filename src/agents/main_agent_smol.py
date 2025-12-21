@@ -90,6 +90,7 @@ class MainAgentSmol:
         self.store = store
         self.session_id = session_id
         self.os_context = ""  # Will be populated when desktop tool is initialized
+        self._desktop_tool: Optional[DesktopSmolTool] = None
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -173,6 +174,7 @@ class MainAgentSmol:
         try:
             # Desktop tool
             desktop = DesktopSmolTool()
+            self._desktop_tool = desktop
             self.tools.append(desktop)
             self.registry.register("desktop", desktop, {
                 "name": desktop.name,
@@ -180,8 +182,35 @@ class MainAgentSmol:
             })
             # Capture OS context for system prompt
             self.os_context = f"\nSYSTEM INFO: Running on {desktop.os_info.get('description', 'Unknown OS')}. {desktop.os_info.get('shortcuts_guide', '')}"
+
+            # Optional: keep a stable "current screenshot" updated periodically so vision can
+            # read passive UI changes without forcing new screenshot filenames constantly.
+            auto_capture_env = os.getenv("DESKTOP_AUTO_CAPTURE")
+            desktop_env = (desktop.os_info.get("desktop_environment") or "").lower()
+            if auto_capture_env is None:
+                auto_capture_enabled = ("kde" in desktop_env) or ("plasma" in desktop_env)
+            else:
+                auto_capture_enabled = auto_capture_env.strip().lower() in ("1", "true", "yes", "on")
+
+            if auto_capture_enabled:
+                try:
+                    interval_s = float(os.getenv("DESKTOP_CAPTURE_INTERVAL", "1.0"))
+                except Exception:
+                    interval_s = 1.0
+                desktop.forward(action="start_auto_capture", seconds=interval_s)
+
+            # Ensure the stable screenshot exists at startup.
+            desktop.forward(action="current_screenshot")
         except Exception as e:
             print(f"Warning: Could not initialize desktop tool: {e}")
+
+    def shutdown(self) -> None:
+        """Best-effort cleanup for background tool loops."""
+        try:
+            if self._desktop_tool is not None:
+                self._desktop_tool.forward(action="stop_auto_capture")
+        except Exception:
+            pass
 
         try:
             # Vision tool

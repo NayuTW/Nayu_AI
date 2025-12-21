@@ -145,7 +145,7 @@ class AppLauncherSmolTool(Tool):
             time.sleep(0.5)
 
             # Take screenshot for verification
-            screenshot_path = self.desktop.forward(action="screenshot")
+            screenshot_path = self.desktop.forward(action="current_screenshot")
 
             return (
                 f"Launched {app_name}. "
