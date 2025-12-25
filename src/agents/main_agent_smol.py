@@ -383,7 +383,7 @@ class MainAgentSmol:
             if downloaded_images:
                 # Make Discord images more prominent in the prompt
                 if source == "discord":
-                    image_info = "\n\n⚠️ DISCORD IMAGE ATTACHMENTS (USE THESE FIRST):\n"
+                    image_info = "\n\n[PRIORITY] DISCORD IMAGE ATTACHMENTS (USE THESE FIRST):\n"
                     image_info += "The user sent these images with their Discord message. "
                     image_info += "When they ask about 'this image' or 'the image', they mean these Discord attachments:\n"
                 else:
@@ -393,7 +393,7 @@ class MainAgentSmol:
                 for idx, img_path in enumerate(downloaded_images, 1):
                     image_info += f"  {idx}. {img_path}\n"
                 
-                image_info += "\n✓ Use vision(path='<image_path>') to analyze these images."
+                image_info += "\n[ACTION REQUIRED] Use vision(path='<image_path>') to analyze these images."
         
         # Build prompt with full context including session memory
         static_prefix = f"""{SYSTEM_PROMPT}
