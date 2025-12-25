@@ -115,7 +115,7 @@ class MainAgentSmol:
             tools=self.tools,
             model=self.model,
             #planning_interval=5,
-            max_steps=15,
+            max_steps=25,
             additional_authorized_imports=[
                 "requests", "json", "re", "time", "datetime",
                 "bs4", "duckduckgo_search", "readability", "html2text"
