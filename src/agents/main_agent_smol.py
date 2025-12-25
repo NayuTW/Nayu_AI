@@ -374,6 +374,17 @@ class MainAgentSmol:
                 history_lines.append(f"{role_label}: {msg.content}")
             conversation_history = "\n".join(history_lines)
         
+        # Extract image attachments from metadata if present
+        image_info = ""
+        if external_metadata and "downloaded_images" in external_metadata:
+            downloaded_images = external_metadata["downloaded_images"]
+            if downloaded_images:
+                image_info = "\n\nIMAGE ATTACHMENTS:\n"
+                image_info += "The user has attached the following images to their message:\n"
+                for idx, img_path in enumerate(downloaded_images, 1):
+                    image_info += f"{idx}. {img_path}\n"
+                image_info += "\nYou can analyze these images using the vision(path='<image_path>') tool."
+        
         # Build prompt with full context including session memory
         static_prefix = f"""{SYSTEM_PROMPT}
 {self.os_context}
@@ -394,6 +405,7 @@ RECENT CONVERSATION:
 MESSAGE SOURCE: {source}
 {f"USER_ID: {user_id}" if user_id else ""}
 {f"CHANNEL_ID: {channel_id}" if channel_id else ""}
+{image_info}
 
 USER MESSAGE:
 {user_text}
@@ -403,11 +415,19 @@ Respond naturally and use tools only if needed. You can reference previous messa
         full_prompt = static_prefix + dynamic_suffix
 
         # Add user message to session
+        msg_metadata = {
+            "source": source,
+            "user_id": user_id,
+            "channel_id": channel_id
+        }
+        if external_metadata and "downloaded_images" in external_metadata:
+            msg_metadata["downloaded_images"] = external_metadata["downloaded_images"]
+        
         self.session_manager.add_message(
             session_id=active_session_id,
             role="user",
             content=user_text,
-            metadata={"source": source, "user_id": user_id, "channel_id": channel_id}
+            metadata=msg_metadata
         )
         
         # Publish input event

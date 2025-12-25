@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+import time
+from pathlib import Path
 from typing import Any, Optional, Set, Iterable
 
 import discord
@@ -10,6 +12,9 @@ logger = logging.getLogger(__name__)
 
 # Discord hard limit is 2000 characters per message. Leave headroom.
 MAX_DISCORD_MSG_LEN = 1900
+
+# Directory for storing downloaded Discord images
+DISCORD_IMAGE_DIR = ".cache/discord_images"
 
 
 def _chunk_text(s: str, n: int = MAX_DISCORD_MSG_LEN) -> Iterable[str]:
@@ -26,6 +31,40 @@ def _only_digits(s: str) -> Optional[int]:
         except Exception:
             return None
     return None
+
+
+async def _download_attachments(message: discord.Message) -> list[str]:
+    """
+    Download image attachments from a Discord message.
+    
+    Returns:
+        List of local file paths to downloaded images.
+    """
+    if not message.attachments:
+        return []
+    
+    # Ensure the directory exists
+    os.makedirs(DISCORD_IMAGE_DIR, exist_ok=True)
+    
+    downloaded_paths = []
+    for attachment in message.attachments:
+        # Check if the attachment is an image
+        if attachment.content_type and attachment.content_type.startswith("image/"):
+            try:
+                # Create a unique filename using timestamp and attachment ID
+                timestamp = int(time.time() * 1000)
+                extension = Path(attachment.filename).suffix or ".png"
+                filename = f"discord_{message.id}_{attachment.id}_{timestamp}{extension}"
+                filepath = os.path.join(DISCORD_IMAGE_DIR, filename)
+                
+                # Download the image
+                await attachment.save(filepath)
+                downloaded_paths.append(filepath)
+                logger.info(f"Downloaded Discord image: {filepath}")
+            except Exception as e:
+                logger.exception(f"Failed to download attachment {attachment.filename}: {e}")
+    
+    return downloaded_paths
 
 
 class DiscordBotService:
@@ -236,6 +275,9 @@ class DiscordBotService:
         This prevents 'dashboard-only' outputs when we don't intend to reply.
         """
         try:
+            # Download any image attachments
+            image_paths = await _download_attachments(message)
+            
             payload: dict[str, Any] = {
                 "source": "discord",
                 "user_id": str(message.author.id),
@@ -250,6 +292,16 @@ class DiscordBotService:
                     "is_dm": message.guild is None,
                     "message_id": str(message.id),
                     "mentions_bot": self._is_bot_mentioned(message),
+                    "image_attachments": [
+                        {
+                            "url": att.url,
+                            "filename": att.filename,
+                            "content_type": att.content_type
+                        }
+                        for att in message.attachments
+                        if att.content_type and att.content_type.startswith("image/")
+                    ],
+                    "downloaded_images": image_paths,
                 },
             }
             # If the agent exposes an EventBus, publish the ingest event
@@ -265,6 +317,9 @@ class DiscordBotService:
         channel_id = str(message.channel.id)
         source = "discord"
 
+        # Download any image attachments
+        image_paths = await _download_attachments(message)
+
         metadata: dict[str, Any] = {
             "username": str(message.author),
             "display_name": getattr(message.author, "display_name", None),
@@ -275,6 +330,16 @@ class DiscordBotService:
             "message_id": str(message.id),
             "mentions_bot": self._is_bot_mentioned(message),
             "respond_mode": self.respond_mode,
+            "image_attachments": [
+                {
+                    "url": att.url,
+                    "filename": att.filename,
+                    "content_type": att.content_type
+                }
+                for att in message.attachments
+                if att.content_type and att.content_type.startswith("image/")
+            ],
+            "downloaded_images": image_paths,
         }
 
         handler = getattr(self.agent, "handle_external_message", None)
