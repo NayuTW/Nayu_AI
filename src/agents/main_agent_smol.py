@@ -48,7 +48,9 @@ TOOLS:
 - desktop: control keyboard/mouse, take screenshots
   • Use 'press' for special keys (enter, tab), 'type' for text
   • Add delays: wait 0.8s after launcher, 0.3s after typing, 2s after app launch
-- vision(path): analyze images from screenshots
+- vision(path): analyze images (screenshots, Discord attachments, or any image file)
+  • Provide the full file path to the image
+  • When image attachments are listed below, use those paths with this tool
 - speech: text-to-speech and audio transcription
 - write_file: create/write files in .workspace directory
   • Supports common formats: .py, .txt, .md, .csv, .json, .yaml, .html, .js, etc.
@@ -379,11 +381,19 @@ class MainAgentSmol:
         if external_metadata and "downloaded_images" in external_metadata:
             downloaded_images = external_metadata["downloaded_images"]
             if downloaded_images:
-                image_info = "\n\nIMAGE ATTACHMENTS:\n"
-                image_info += "The user has attached the following images to their message:\n"
+                # Make Discord images more prominent in the prompt
+                if source == "discord":
+                    image_info = "\n\n⚠️ DISCORD IMAGE ATTACHMENTS (USE THESE FIRST):\n"
+                    image_info += "The user sent these images with their Discord message. "
+                    image_info += "When they ask about 'this image' or 'the image', they mean these Discord attachments:\n"
+                else:
+                    image_info = "\n\nIMAGE ATTACHMENTS:\n"
+                    image_info += "The user has attached the following images to their message:\n"
+                
                 for idx, img_path in enumerate(downloaded_images, 1):
-                    image_info += f"{idx}. {img_path}\n"
-                image_info += "\nYou can analyze these images using the vision(path='<image_path>') tool."
+                    image_info += f"  {idx}. {img_path}\n"
+                
+                image_info += "\n✓ Use vision(path='<image_path>') to analyze these images."
         
         # Build prompt with full context including session memory
         static_prefix = f"""{SYSTEM_PROMPT}

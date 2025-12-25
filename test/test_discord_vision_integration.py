@@ -137,11 +137,14 @@ def test_agent_handles_image_metadata():
     # Verify it adds image information to the prompt
     assert "IMAGE ATTACHMENTS" in source
     
-    print("✓ Agent handle_user_message processes image metadata")
+    # Verify it has Discord-specific handling with priority indication
+    assert "DISCORD IMAGE ATTACHMENTS" in source or "USE THESE FIRST" in source
+    
+    print("✓ Agent handle_user_message processes image metadata with Discord priority")
 
 
 def test_vision_tool_in_system_prompt():
-    """Test that vision tool is mentioned in the system prompt."""
+    """Test that vision tool is mentioned in the system prompt with proper scope."""
     # Read the source file directly
     source_file = Path(__file__).parent.parent / "src" / "agents" / "main_agent_smol.py"
     with open(source_file, "r") as f:
@@ -150,7 +153,10 @@ def test_vision_tool_in_system_prompt():
     # Verify vision tool is mentioned in SYSTEM_PROMPT
     assert "vision" in source and "SYSTEM_PROMPT" in source
     
-    print("✓ Vision tool is mentioned in system prompt")
+    # Verify it mentions Discord attachments (not just screenshots)
+    assert "Discord attachments" in source or "discord attachments" in source
+    
+    print("✓ Vision tool description includes Discord attachments and all image types")
 
 
 def test_integration_flow():
