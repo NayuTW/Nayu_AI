@@ -53,7 +53,29 @@ Programmatic restrictions (pass to `DiscordBotService`):
 
 - Listens to `on_message` for all guild + DM messages.
 - For every message, forwards text + metadata to `MainAgent.handle_external_message(...)` for ingestion (memory/metrics).
+- **Automatically downloads image attachments** from Discord messages and saves them to `.cache/discord_images/`.
+- **Passes image paths to the agent** via metadata, allowing the vision tool to analyze them.
 - Depending on `respond_mode`, the service obtains a reply from the agent and posts it back to the same context (DM or channel reply).
+
+## Vision Tool Integration
+
+The Discord integration now supports automatic image analysis:
+
+1. **Automatic Download**: When a user sends a message with image attachments, the bot automatically downloads them to `.cache/discord_images/`.
+
+2. **Vision Tool Access**: The main agent is informed about attached images and can use the `vision(path='...')` tool to analyze them.
+
+3. **Example Usage**: 
+   - User sends: "What's in this image?" with an image attachment
+   - Agent automatically sees: `IMAGE ATTACHMENTS: 1. .cache/discord_images/discord_123_456_789.png`
+   - Agent can call: `vision(path='.cache/discord_images/discord_123_456_789.png')`
+   - Agent responds with image description
+
+4. **Supported Formats**: Any image format Discord supports (PNG, JPG, GIF, WebP, etc.)
+
+5. **Metadata**: Image information is included in:
+   - `metadata['downloaded_images']`: List of local file paths
+   - `metadata['image_attachments']`: List of attachment info (URL, filename, content type)
 
 ## Sending Messages Programmatically
 
