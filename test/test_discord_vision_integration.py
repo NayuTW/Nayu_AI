@@ -60,16 +60,12 @@ async def test_download_attachments_empty_message():
 
 async def test_download_attachments_with_image():
     """Test _download_attachments with an image attachment."""
-    from src.integrations.discord_bot import _download_attachments, DISCORD_IMAGE_DIR
+    from src.integrations.discord_bot import _download_attachments
     
     # Create a temporary directory for testing
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Override the DISCORD_IMAGE_DIR for this test
-        import src.integrations.discord_bot as discord_bot_module
-        original_dir = discord_bot_module.DISCORD_IMAGE_DIR
-        discord_bot_module.DISCORD_IMAGE_DIR = tmpdir
-        
-        try:
+        # Use patch to override the DISCORD_IMAGE_DIR for this test
+        with patch('src.integrations.discord_bot.DISCORD_IMAGE_DIR', tmpdir):
             # Create a mock attachment
             mock_attachment = Mock()
             mock_attachment.content_type = "image/png"
@@ -108,10 +104,6 @@ async def test_download_attachments_with_image():
                 assert content == test_image_content
             
             print(f"✓ _download_attachments successfully downloads image to {result[0]}")
-        
-        finally:
-            # Restore original directory
-            discord_bot_module.DISCORD_IMAGE_DIR = original_dir
 
 
 def test_metadata_includes_downloaded_images():

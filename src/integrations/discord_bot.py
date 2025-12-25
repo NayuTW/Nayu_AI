@@ -46,6 +46,9 @@ async def _download_attachments(message: discord.Message) -> list[str]:
     # Ensure the directory exists
     os.makedirs(DISCORD_IMAGE_DIR, exist_ok=True)
     
+    # Allowlist of safe image extensions
+    SAFE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'}
+    
     downloaded_paths = []
     for attachment in message.attachments:
         # Check if the attachment is an image
@@ -53,7 +56,13 @@ async def _download_attachments(message: discord.Message) -> list[str]:
             try:
                 # Create a unique filename using timestamp and attachment ID
                 timestamp = int(time.time() * 1000)
-                extension = Path(attachment.filename).suffix or ".png"
+                
+                # Validate and sanitize the file extension
+                extension = Path(attachment.filename).suffix.lower()
+                if extension not in SAFE_EXTENSIONS:
+                    logger.warning(f"Skipping attachment with unsafe extension: {extension}")
+                    extension = ".png"  # Default to .png for safety
+                
                 filename = f"discord_{message.id}_{attachment.id}_{timestamp}{extension}"
                 filepath = os.path.join(DISCORD_IMAGE_DIR, filename)
                 
