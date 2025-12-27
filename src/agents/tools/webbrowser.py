@@ -9,12 +9,12 @@ import time
 from typing import Any, Optional
 from urllib.parse import urlparse, urljoin
 
-import html2text
-import requests
 from bs4 import BeautifulSoup
 from ddgs import DDGS
+import html2text
 from playwright.async_api import async_playwright
 from readability import Document
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from smolagents import Tool
