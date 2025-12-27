@@ -11,7 +11,7 @@ The old CodeAgent tool (which included a WriteFileTool and separate web search c
 ## Solution
 
 ### 1. Web Tool Analysis
-**Finding**: No web functionality was lost. The `webbrowser_smol.py` tool already imports and uses all core functions from `webbrowser.py`:
+**Finding**: No web functionality was lost. The `WebBrowserSmolTool` now lives alongside `WebBrowserTool` in `webbrowser.py` and reuses all core functions:
 - `_ddg_search`: DuckDuckGo search
 - `_static_or_dynamic`: Fetch HTML with fallback
 - `_to_markdown`: Convert HTML to Markdown

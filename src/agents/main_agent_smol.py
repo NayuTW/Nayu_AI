@@ -7,7 +7,7 @@ import inspect
 import numpy as np
 import os
 import time
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from smolagents import ActionStep, CodeAgent, RunResult
 from sentence_transformers import SentenceTransformer
@@ -21,7 +21,7 @@ from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
 
 # Import smolagents-compatible tools
-from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
+from src.agents.tools.webbrowser import WebBrowserSmolTool
 from src.agents.tools.desktop_smol import DesktopSmolTool
 from src.agents.tools.vision_smol import VisionSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool

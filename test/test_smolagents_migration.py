@@ -87,7 +87,7 @@ def test_imports():
     # Test 7: WebBrowserSmolTool
     print("\n7. Testing WebBrowserSmolTool...")
     try:
-        from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
+        from src.agents.tools.webbrowser import WebBrowserSmolTool
         tool = WebBrowserSmolTool()
         print(f"   ✓ WebBrowserSmolTool created: {tool.name}")
         tests.append(("WebBrowserSmolTool", True, None))
