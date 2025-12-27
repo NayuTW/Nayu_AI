@@ -3,14 +3,14 @@ Main Agent using smolagents CodeAgent for orchestration.
 This replaces the custom LLM-based orchestrator with smolagents' built-in CodeAgent.
 """
 import asyncio
+import inspect
 import numpy as np
 import os
 import time
 from typing import Any, Optional
 
-from smolagents import CodeAgent
-from fastembed import TextEmbedding
-from sklearn.decomposition import PCA
+from smolagents import ActionStep, CodeAgent, RunResult
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from src.agents.state import SharedState
@@ -31,20 +31,21 @@ from src.agents.tools.writefile_smol import WriteFileSmolTool
 from src.agents.memory.session_manager import SessionManager
 
 
-SYSTEM_PROMPT = """You are a helpful AI named Kanna. Chat naturally and use tools ONLY when needed.
+# System prompt for the main agent - CONDENSED
+SYSTEM_PROMPT = """You are a helpful AI named Kanna. Chat naturally and use tools when needed.
 
 CRITICAL RULES:
-1. ALWAYS provide your final response with final_answer() - this is mandatory for every response
-2. After ANY tool succeeds (especially discord), immediately call final_answer()
-3. Process tool outputs - explain them in your own words, don't echo raw data
+1. Follow a ReAct loop: think → act (tool) → observe → repeat until done.
+2. Use multiple steps when a tool is required (e.g., call vision to read a screenshot, then act on that info in the next step).
+3. Do NOT jump to a final answer before you have the necessary observations.
+4. Summarize tool outputs in your own words; don't echo raw data.
 
 TOOLS:
 - launch_app(app_name): Launch desktop apps
-    - If you launch 'terminal' with this tool, it will open a new terminal window navigated to your .workspace directory.
-    - This tool automatically saves a screenshot after each use.
+    - This tool automatically saves a screenshot after each use. Use the vision tool on that screenshot to verify the app launch.
 - memory: remember/recall information
 - webbrowser: search the web, fetch URLs
-    - This is useful for making quick single query searches and receiving basic information from the web.
+    - Useful for quick searches and retrieving basic information from the web.
 - desktop: control keyboard/mouse, take screenshots
   • Use 'press' for special keys (enter, tab), 'type' for text
   • Add delays: wait 0.8s after launcher, 0.3s after typing, 2s after app launch
@@ -55,11 +56,16 @@ TOOLS:
   • Has safety guardrails to prevent harmful code
   • Use write_file(filename='myfile.txt', content='...', mode='write')
 - discord: send Discord messages
-  • CRITICAL: Call final_answer() immediately after discord confirms success
-  • CRITICAL: Make sure to wrap your code blocks in <code>...</code> NOTE: All responses must be given in a code block.
-  - Nothing outside of the code block will be seen by the user
-  • CRITICAL: To provide your final response you MUST call final_answer("final answer here") within your code block
-Be conversational and concise."""
+  • If you send a Discord message, provide the final response only after confirming success.
+  
+Make sure to include code with the correct pattern, for instance:
+    Thoughts: Your thoughts
+    <code>
+    # Your python code here
+    </code>
+    Make sure to provide correct code blobs.
+
+Be conversational and concise. Only give the final answer when you are confident the task is complete."""
 
 
 class MainAgentSmol:
@@ -84,6 +90,7 @@ class MainAgentSmol:
         self.store = store
         self.session_id = session_id
         self.os_context = ""  # Will be populated when desktop tool is initialized
+        self._latest_action_steps: List[Dict[str, Any]] = []
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -118,6 +125,7 @@ class MainAgentSmol:
                 "bs4", "duckduckgo_search", "readability", "html2text"
             ]
         )
+        self._register_action_step_callback()
 
         # Lightweight embedding model for tool selection
         print("Loading tool embedder (this may take a moment on first run)...")
@@ -233,8 +241,61 @@ class MainAgentSmol:
                 "description": write_file.description
             })
         except Exception as e:
-            print(f"Warning: Could not initialize write_file tool: {e}")
-        
+            print(f"Warning: Could not initialize codeexec tool: {e}")
+    
+    def _register_action_step_callback(self):
+        """Register a callback to capture smolagents ActionStep data."""
+        try:
+            callbacks = getattr(self.agent, "step_callbacks", None)
+            if callbacks:
+                callbacks.register(ActionStep, self._capture_action_step)
+        except Exception as e:
+            print(f"Warning: Could not register ActionStep callback: {e}")
+
+    def _capture_action_step(self, step: ActionStep, agent=None):
+        """Store the latest ActionStep for multi-step visibility."""
+        step_dict: Dict[str, Any] = {}
+        try:
+            if hasattr(step, "dict"):
+                step_dict = step.dict()
+            elif hasattr(step, "model_dump"):
+                step_dict = step.model_dump()
+            else:
+                step_dict = vars(step) if hasattr(step, "__dict__") else {}
+        except (AttributeError, TypeError, ValueError) as e:
+            print(f"Warning: Failed to serialize ActionStep: {e}")
+        if not step_dict:
+            fields = ("step_number", "timing", "observations", "action_output")
+            step_dict = {field: getattr(step, field, None) for field in fields}
+        self._latest_action_steps.append(self._ensure_jsonable(step_dict))
+        observation = self._extract_last_observation([step_dict])
+        if observation:
+            self.state.last_observation = observation
+
+    def _sanitize_steps(self, steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Ensure steps are JSON serializable for storage and events."""
+        return [self._ensure_jsonable(step) for step in steps] if steps else []
+
+    def _ensure_jsonable(self, data: Any) -> Any:
+        """Convert non-serializable values to strings."""
+        if isinstance(data, dict):
+            return {k: self._ensure_jsonable(v) for k, v in data.items()}
+        if isinstance(data, list):
+            return [self._ensure_jsonable(v) for v in data]
+        if isinstance(data, (bytes, bytearray)):
+            return data.hex()
+        if isinstance(data, (str, int, float, bool)) or data is None:
+            return data
+        return str(data)
+
+    def _extract_last_observation(self, steps: List[Dict[str, Any]]) -> Optional[str]:
+        """Extract the most recent observation or tool output from steps."""
+        for step in reversed(steps or []):
+            obs = step.get("observations") or step.get("action_output")
+            if obs:
+                return obs if isinstance(obs, str) else str(obs)
+        return None
+    
     def add_discord_tool(self, discord_service):
         """
         Add Discord tool to the agent after initialization.
@@ -276,6 +337,7 @@ class MainAgentSmol:
                     "bs4", "duckduckgo_search", "readability", "html2text"
                 ]
             )
+            self._register_action_step_callback()
             
             # Also register in registry for tracking
             self.registry.register("discord", discord_tool, {
@@ -424,15 +486,37 @@ Respond naturally and use tools only if needed. You can reference previous messa
 
         try:
             t0 = time.time()
+            self._latest_action_steps = []
             
             # Use standard agent for now (tool selection can be enabled later)
-            result = await asyncio.to_thread(self.agent.run, full_prompt)
+            run_kwargs = {}
+            if "return_full_result" in inspect.signature(self.agent.run).parameters:
+                run_kwargs["return_full_result"] = True
+            run_output = await asyncio.to_thread(self.agent.run, full_prompt, **run_kwargs)
             
             latency_ms = (time.time() - t0) * 1000
             print(f"Agent response time: {latency_ms:.0f}ms")
+            result = run_output.output if isinstance(run_output, RunResult) else run_output
+            
+            if isinstance(run_output, RunResult):
+                action_steps = self._sanitize_steps(run_output.steps or [])
+                if action_steps:
+                    self._latest_action_steps.extend(action_steps)
+            if self._latest_action_steps:
+                await self.bus.publish("agent.steps", {
+                    "session_id": active_session_id,
+                    "steps": self._latest_action_steps
+                })
+                last_obs = self._extract_last_observation(self._latest_action_steps)
+                if last_obs:
+                    self.state.last_observation = last_obs
             
             # Clean up result if it's empty or contains code
-            if not result or not result.strip():
+            if result is None:
+                result = ""
+            if not isinstance(result, str):
+                result = str(result)
+            if not result.strip():
                 result = "I processed your request."
             
             # Add assistant response to session
