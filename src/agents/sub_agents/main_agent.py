@@ -25,7 +25,7 @@ from src.agents.tools.desktop_smol import DesktopSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
 from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
-# from src.agents.tools.writefile_smol import WriteFileSmolTool
+from src.agents.tools.writefile_smol import WriteFileSmolTool
 
 
 class MainAgent(BaseAgent):
