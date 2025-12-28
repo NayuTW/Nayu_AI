@@ -11,6 +11,7 @@ from typing import Any, Optional
 from smolagents import CodeAgent, RunResult
 
 from src.agents.base_agent import BaseAgent, SYSTEM_PROMPT, ToolEmbedder
+from src.agents.sub_agents.vision_agent import VisionAgent
 from src.agents.core.events import EventBus
 from src.agents.core.registry import ToolRegistry
 from src.agents.core.store import SQLiteStore
@@ -24,7 +25,7 @@ from src.agents.tools.desktop_smol import DesktopSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
 from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
-from src.agents.tools.writefile_smol import WriteFileSmolTool
+# from src.agents.tools.writefile_smol import WriteFileSmolTool
 
 
 class MainAgent(BaseAgent):
@@ -170,6 +171,15 @@ class MainAgent(BaseAgent):
         except Exception as e:
             print(f"Warning: Could not initialize discord tool: {e}")
     
+    def _managed_agents_list(self) -> None:
+        """Add managed agents"""
+        try:
+            vision = VisionAgent()
+            self.managed_agents = [vision]
+        except Exception as e:
+            print(f"Warning: Could not initialize managed agents: {e}")
+
+
     def _register_action_step_callback(self) -> None:
         """Register callback to capture smolagents ActionStep data."""
         try:
