@@ -27,7 +27,7 @@ class AppLauncherSmolTool(Tool):
     }
     output_type = "string"
     
-    def __init__(self, desktop_tool, vision_tool):
+    def __init__(self, desktop_tool, vision_tool=None):
         super().__init__()
         self.desktop = desktop_tool
         self.vision = vision_tool

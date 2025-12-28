@@ -4,7 +4,7 @@ Uses Ollama Vision Language Model to analyze images.
 """
 import os
 import base64
-from typing import Optional
+from typing import Optional, Any
 from smolagents import Tool
 
 import aiohttp
@@ -34,9 +34,11 @@ class VisionSmolTool(Tool):
     }
     output_type = "string"
 
-    def __init__(self, model_id: str = "gemma3:4b", api_base: str = "http://localhost:11434", timeout: int = 60):
+    def __init__(self, agent: Optional[Any] = None, model_id: str = "gemma3:4b", api_base: str = "http://localhost:11434", timeout: int = 60):
         super().__init__()
+        self.agent = agent
         self.model_id = model_id
+        self.api_base = api_base
         self.generate_url = f"{api_base}/api/generate"
         self.timeout = timeout
 
@@ -108,13 +110,32 @@ class VisionSmolTool(Tool):
         # Encode image to base64
         image_b64 = self._encode_image(path)
         
+        # Determine model and num_ctx from agent if available
+        model_id = self.model_id
+        num_ctx = None
+        
+        if self.agent and hasattr(self.agent, "model") and self.agent.model:
+            # Get model_id from agent's model
+            # OllamaLiteLLMModel stores it as 'ollama_chat/model_name'
+            raw_model_id = getattr(self.agent.model, "model_id", "")
+            if raw_model_id.startswith("ollama_chat/"):
+                model_id = raw_model_id.replace("ollama_chat/", "")
+            elif raw_model_id:
+                model_id = raw_model_id
+            
+            num_ctx = getattr(self.agent.model, "num_ctx", None)
+        
         # Prepare request payload
         payload = {
-            "model": self.model_id,
+            "model": model_id,
             "prompt": prompt,
             "images": [image_b64],
             "stream": False
         }
+        
+        # Add options if num_ctx is available
+        if num_ctx:
+            payload["options"] = {"num_ctx": num_ctx}
         
         # Make request to Ollama
         async with aiohttp.ClientSession() as session:

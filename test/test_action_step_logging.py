@@ -2,6 +2,7 @@ import asyncio
 import sys
 import types
 from unittest.mock import patch
+from threading import RLock
 
 import numpy as np
 import pytest
@@ -100,7 +101,7 @@ class FakeAgent:
 def test_handle_user_message_collects_action_steps():
     from src.agents.core.events import EventBus
     from src.agents.core.registry import ToolRegistry
-    from src.agents.main_agent_smol import MainAgentSmol
+    from src.agents.sub_agents.main_agent import MainAgent
     from src.agents.memory.session_manager import SessionManager
     from src.agents.notify.notifier import Notifier
     from src.agents.state import SharedState
@@ -110,14 +111,16 @@ def test_handle_user_message_collects_action_steps():
     registry = ToolRegistry(store=store)
     notifier = Notifier(speech_tool=None, voice_enabled=False, speak_on_error=False)
 
-    with patch.object(MainAgentSmol, "__init__", return_value=None):
-        agent = MainAgentSmol(state=None, bus=None, registry=None, notifier=None, store=None, session_id="stub")
-    agent.state = SharedState()
-    agent.bus = bus
-    agent.registry = registry
-    agent.notifier = notifier
-    agent.store = store
-    agent.session_id = "test-session"
+    with patch.object(MainAgent, "__init__", return_value=None):
+        agent = MainAgent(state=None, bus=None, registry=None, notifier=None, store=None, session_id="stub")
+    agent._state = SharedState()
+    agent._bus = bus
+    agent._registry = registry
+    agent._notifier = notifier
+    agent._store = store
+    agent._session_id = "test-session"
+    agent._latest_action_steps = []
+    agent._lock = RLock()
     agent.os_context = ""
     agent.tool_embedder = DummyEmbedder()
     agent.tool_embeddings = {"dummy": agent.tool_embedder.encode("dummy")}

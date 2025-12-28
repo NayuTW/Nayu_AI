@@ -55,7 +55,8 @@ class VisionAgent(BaseAgent):
     def _init_tools(self) -> None:
         """Initialize all smolagents-compatible tools."""
         try:
-            vision = VisionSmolTool()
+            # Pass self as agent to allow vision tool to use the same model
+            vision = VisionSmolTool(agent=self)
             self.add_tool(vision)
             self.registry.register("vision", vision, {
                 "name": vision.name,

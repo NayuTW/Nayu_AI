@@ -72,7 +72,7 @@ class DiscordSmolTool(Tool):
             await self.discord_service.send_channel_target(target, message)
 ```
 
-#### 2. Updated `main_agent_smol.py`
+#### 2. Updated `main_agent.py`
 
 Changed `add_discord_tool()` to use the direct tool instead of the nested agent wrapper:
 
@@ -143,7 +143,7 @@ Tests verify:
 - ✓ DiscordSmolTool is a proper Tool subclass
 - ✓ Tool can be instantiated without nested agents
 - ✓ forward() method works correctly
-- ✓ MainAgentSmol uses direct tool (not nested agent)
+- ✓ MainAgent uses direct tool (not nested agent)
 - ✓ Tool description is clear and complete
 
 ## Best Practices for Future Tools
@@ -182,7 +182,7 @@ class MyAgentTool(Tool):
 
 - `src/agents/tools/discord_tool_smol.py` - Direct Discord tool (✓ use this)
 - `src/agents/tools/discord_agent_tool.py` - Deprecated nested agent (❌ don't use)
-- `src/agents/main_agent_smol.py` - Main agent using direct tools
+- `src/agents/main_agent.py` - Main agent using direct tools
 - `test_discord_tool_fix.py` - Test suite for the fix
 
 ## References

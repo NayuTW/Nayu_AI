@@ -133,6 +133,8 @@ async def main():
     
     # Start Discord bot if configured
     discord_service = await start_discord_bot(agent)
+    if discord_service:
+        agent.set_discord_service(discord_service)
 
     # Print startup information
     print("=" * 60)

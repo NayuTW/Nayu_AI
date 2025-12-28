@@ -8,7 +8,7 @@ This PR migrates the entire Nayu_AI application from a custom LLM-based orchestr
 
 ### New Files
 - `src/agents/llm/litellm_model.py` - LiteLLM wrapper for Ollama
-- `src/agents/main_agent_smol.py` → `src/agents/main_agent.py` - New main agent using CodeAgent
+- `src/agents/main_agent.py` → `src/agents/main_agent.py` - New main agent using CodeAgent
 - `src/app_smol.py` → `src/app.py` - Updated application entry point
 - `src/agents/tools/memory_smol.py` - Memory tool using smolagents Tool class
 - `src/agents/tools/desktop_smol.py` - Desktop control tool using smolagents

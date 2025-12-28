@@ -162,6 +162,16 @@ class MainAgent(BaseAgent):
             print(f"Warning: Could not initialize speech tool: {e}")
         
         try:
+            vision = VisionSmolTool(agent=self)
+            self.add_tool(vision)
+            self.registry.register("vision", vision, {
+                "name": vision.name,
+                "description": vision.description
+            })
+        except Exception as e:
+            print(f"Warning: Could not initialize vision tool: {e}")
+        
+        try:
             write_file = WriteFileSmolTool(workspace_dir=".workspace")
             self.add_tool(write_file)
             self.registry.register("write_file", write_file, {
@@ -219,12 +229,27 @@ It has access to tools for desktop control, web browsing, memory management, spe
         """Get summary of managed agents for dashboard/logging."""
         return self.get_managed_agents_info()
 
+    def set_discord_service(self, service: Any) -> None:
+        """
+        Set the Discord service for the Discord tool.
+        This allows late-binding of the service after agent initialization.
+        """
+        for tool in self.tools:
+            if isinstance(tool, DiscordSmolTool):
+                tool.discord = service
+                print("Discord service linked to DiscordSmolTool")
+                break
+
     def _register_action_step_callback(self) -> None:
         """Register callback to capture smolagents ActionStep data."""
         try:
             callbacks = getattr(self.agent, "step_callbacks", None)
             if callbacks:
-                callbacks.append(self._capture_action_step)
+                # CallbackRegistry in smolagents uses register() method
+                if hasattr(callbacks, "register"):
+                    callbacks.register(self._capture_action_step)
+                elif hasattr(callbacks, "append"):
+                    callbacks.append(self._capture_action_step)
         except Exception as e:
             print(f"Warning: Could not register ActionStep callback: {e}")
     

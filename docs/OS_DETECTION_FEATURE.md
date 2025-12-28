@@ -22,7 +22,7 @@ Added automatic OS and desktop environment detection to the desktop tool, with O
   - **Windows**: Win key shortcuts
   - **macOS**: Command key shortcuts
 
-### 2. Main Agent (`src/agents/main_agent.py` and `src/agents/main_agent_smol.py`)
+### 2. Main Agent (`src/agents/main_agent.py` and `src/agents/main_agent.py`)
 - Added `os_context` field to store OS information
 - Modified `_init_tools()` to capture OS context from desktop tool
 - Updated prompt building to include OS context in system prompt

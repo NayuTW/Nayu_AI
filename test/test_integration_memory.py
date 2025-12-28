@@ -165,7 +165,7 @@ async def test_context_prompt_assembly():
         # Get context
         summary, working_set, messages = session_manager.get_context(session_id)
         
-        # Simulate prompt assembly (like in main_agent_smol.py)
+        # Simulate prompt assembly (like in main_agent.py)
         conversation_history = ""
         if messages:
             history_lines = []
