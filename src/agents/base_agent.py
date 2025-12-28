@@ -20,6 +20,8 @@ from src.agents.llm.litellm_model import OllamaLiteLLMModel
 from src.agents.memory.session_manager import SessionManager
 from src.agents.notify.notifier import Notifier
 from src.agents.state import SharedState
+from src.agents.factory import AgentFactory
+
 
 # ============ Module Constants ============
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
@@ -29,38 +31,37 @@ DEFAULT_AUTHORIZED_IMPORTS = [
     "bs4", "duckduckgo_search", "readability", "html2text"
 ]
 
-SYSTEM_PROMPT = """You are a helpful AI named Kanna. Chat naturally and use tools when needed.
+SYSTEM_PROMPT = """You are Nayu_AI, a helpful local AI assistant. You coordinate multiple tools and specialized agents to fulfill user requests.
 
 CRITICAL RULES:
-1. Follow a ReAct loop: think → act (tool) → observe → repeat until done.
-2. Use multiple steps when a tool is required (e.g., call vision to read a screenshot, then act on that info in the next step).
-3. Do NOT jump to a final answer before you have the necessary observations.
-4. Summarize tool outputs in your own words; don't echo raw data.
+1. Follow a ReAct loop: Thoughts -> Code -> Observation -> Repeat.
+2. Always wrap your python code in <code></code> blocks.
+3. You MUST use the `final_answer(result)` function to provide your final response to the user. Do not just state the answer; call the function.
+4. If a task requires vision analysis (describing images, screenshots, OCR), you MUST delegate it to the `vision_agent`.
 
-TOOLS:
-- launch_app(app_name): Launch desktop apps
-    - This tool automatically saves a screenshot after each use. Use the vision tool on that screenshot to verify the app launch.
-- memory: remember/recall information
-- webbrowser: search the web, fetch URLs
-    - Useful for quick searches and retrieving basic information from the web.
-- desktop: control keyboard/mouse, take screenshots
-  • Use 'press' for special keys (enter, tab), 'type' for text
-  • Add delays: wait 0.8s after launcher, 0.3s after typing, 2s after app launch
-- vision(path): analyze images from screenshots
-- speech: text-to-speech and audio transcription
-- write_file: create/write files in .workspace directory
-  • Supports common formats: .py, .txt, .md, .csv, .json, .yaml, .html, .js, etc.
-  • Has safety guardrails to prevent harmful code
-  • Use write_file(filename='myfile.txt', content='...', mode='write')
-- discord: send Discord messages
-  • If you send a Discord message, provide the final response only after confirming success.
+TOOLS & AGENTS:
+- vision_agent: Specialized in image analysis. Call it when you need to "see" or "describe" something.
+    - Example: `vision_agent(task="Describe the image at .cache/screenshot.png")`
+- launch_app(app_name): Launch desktop apps.
+- memory: Store and retrieve long-term information.
+- webbrowser: Search and browse the web.
+- desktop: Control mouse/keyboard and take screenshots.
+    - `desktop(action='screenshot')` returns the path to the saved image.
+- speech: Text-to-speech and transcription.
+- write_file: Create and edit files.
 
-Make sure to include code with the correct pattern, for instance:
-    Thoughts: Your thoughts
+VISION WORKFLOW:
+If the user asks about something on their screen:
+1. Use `desktop(action='screenshot')` to capture the screen.
+2. Call `vision_agent(task="Describe what is in this image: <path>")` using the path from step 1.
+3. Use the observation from vision_agent to formulate your next thought or final answer.
+
+Make sure to include code with the correct pattern:
+    Thoughts: Your reasoning
     <code>
     # Your python code here
+    # Use final_answer("...") for the final response
     </code>
-    Make sure to provide correct code blobs.
 
 Be conversational and concise. Only give the final answer when you are confident the task is complete."""
 
@@ -156,10 +157,14 @@ class BaseAgent(ABC):
         self._tools: List[Any] = []
         self._managed_agents: List[Any] = []
         self._agent: Optional[CodeAgent] = None
+        self._agent_description: str = ""
         self._session_manager: Optional[SessionManager] = None
         self._tool_embedder: Optional[ToolEmbedder] = None
         self._os_context: str = ""
         self._latest_action_steps: List[Dict[str, Any]] = []
+        
+        # Register instance in factory
+        AgentFactory.register_instance(self.__class__.__name__, self)
     
     # ============ Read-Only Infrastructure Properties ============
     @property
@@ -348,6 +353,64 @@ class BaseAgent(ABC):
                 "count": len(self._managed_agents),
             })
     
+    def delegate_agent(self, agent_name: str) -> bool:
+        """
+        Add an existing agent instance to managed agents by name.
+        
+        Args:
+            agent_name: Name of the agent instance to delegate to
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        with self._lock:
+            target_agent = AgentFactory.get_instance(agent_name)
+            if not target_agent:
+                self.bus.emit("agent.error", {
+                    "agent": self.__class__.__name__,
+                    "error": f"Agent instance '{agent_name}' not found in registry"
+                })
+                return False
+            
+            if target_agent is self:
+                self.bus.emit("agent.error", {
+                    "agent": self.__class__.__name__,
+                    "error": "Cannot delegate an agent to itself"
+                })
+                return False
+            
+            # Check if already managed
+            if any(a.__class__.__name__ == agent_name for a in self._managed_agents):
+                return True # Already delegated
+            
+            try:
+                self.add_managed_agent(target_agent)
+                return True
+            except Exception as e:
+                self.bus.emit("agent.error", {
+                    "agent": self.__class__.__name__,
+                    "error": f"Failed to delegate {agent_name}: {str(e)}"
+                })
+                return False
+
+    def get_managed_agents_info(self) -> list[dict[str, Any]]:
+        """
+        Get detailed info for all managed agents including descriptions.
+        
+        Returns:
+            List of dicts with agent name, type, and description
+        """
+        with self._lock:
+            agents_info = []
+            for agent in self._managed_agents:
+                agent_info = {
+                    "name": agent.__class__.__name__,
+                    "type": type(agent).__name__,
+                    "description": getattr(agent, "agent_description", ""),
+                }
+                agents_info.append(agent_info)
+            return agents_info
+
     # ============ CodeAgent Property ============
     @property
     def agent(self) -> Optional[CodeAgent]:
@@ -361,6 +424,47 @@ class BaseAgent(ABC):
         with self._lock:
             self._agent = value
     
+    # ============ Agent Description Property ============
+    @property
+    def name(self) -> str:
+        """Get the agent name (required by smolagents)."""
+        import re
+        name = self.__class__.__name__
+        return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+
+    @property
+    def description(self) -> str:
+        """Get the agent description (required by smolagents)."""
+        return self.agent_description
+
+    def forward(self, task: str, **kwargs) -> Any:
+        """
+        Forward method for smolagents Tool compatibility.
+        """
+        return self.run(task, **kwargs)
+
+    def __call__(self, task: str, **kwargs) -> Any:
+        """
+        Make the agent instance callable for smolagents managed_agents compatibility.
+        This allows the orchestrator to call this agent as a tool.
+        """
+        return self.run(task, **kwargs)
+
+    @property
+    def agent_description(self) -> str:
+        """Get the agent description string."""
+        with self._lock:
+            return self._agent_description
+        
+    @agent_description.setter
+    def agent_description(self, value: str) -> None:
+        """Set the agent description string."""
+        if not isinstance(value, str):
+            raise ValueError("Agent description must be a string")
+        
+        with self._lock:
+            self._agent_description = value
+            
     # ============ Session Manager Property ============
     @property
     def session_manager(self) -> Optional[SessionManager]:
@@ -433,6 +537,36 @@ class BaseAgent(ABC):
         with self._lock:
             return [dict(step) for step in self._latest_action_steps]
     
+    def run(self, task: str, **kwargs) -> Any:
+        """
+        Synchronous run method for smolagents compatibility.
+        Delegates to the internal CodeAgent.
+        
+        Args:
+            task: The task or prompt for the agent
+            **kwargs: Additional arguments passed to CodeAgent.run
+            
+        Returns:
+            The result of the agent execution
+        """
+        if self._agent is None:
+            with self._lock:
+                if self._agent is None:
+                    self._rebuild_code_agent()
+        
+        # Ensure we have an agent
+        if self._agent is None:
+            return "Error: Agent not initialized"
+            
+        return self._agent.run(task, **kwargs)
+
+    def __call__(self, task: str, **kwargs) -> Any:
+        """
+        Make the agent instance callable for smolagents managed_agents compatibility.
+        This allows the orchestrator to call this agent as a tool.
+        """
+        return self.run(task, **kwargs)
+
     def add_action_step(self, step: Dict[str, Any]) -> None:
         """Add an action step."""
         with self._lock:
@@ -471,6 +605,7 @@ class BaseAgent(ABC):
                 model=self._model,
                 max_steps=self._get_max_steps(),
                 additional_authorized_imports=self._get_authorized_imports(),
+                code_block_tags=("<code>", "</code>"),
             )
             
             self.bus.emit("agent.rebuilt", {
@@ -506,5 +641,179 @@ class BaseAgent(ABC):
     def _register_action_step_callback(self) -> None:
         """Register action step callback. May be overridden by subclasses."""
         pass
+    
+    def _register_managed_agent(self, agent: "BaseAgent") -> None:
+        """
+        Register a managed agent with automatic setup (description, validation, logging).
+        
+        Encapsulates the common pattern: set description, add to list, log, emit event.
+        Used by all agent types (MainAgent, VisionAgent, etc.) to manage sub-agents.
+        
+        Args:
+            agent: BaseAgent instance to register as managed agent
+        
+        Raises:
+            ValueError: If agent is None or not a BaseAgent instance
+        """
+        if agent is None:
+            raise ValueError("Agent cannot be None")
+        
+        if not isinstance(agent, BaseAgent):
+            raise ValueError(f"Agent must be BaseAgent instance, got {type(agent)}")
+        
+        try:
+            # Set description if not already set
+            if not hasattr(agent, "agent_description") or not agent.agent_description:
+                agent._set_description()
+            
+            # Add to managed agents list via parent property (thread-safe)
+            current_agents = list(self._managed_agents)
+            current_agents.append(agent)
+            self.managed_agents = current_agents  # Uses property setter with lock
+            
+            # Log registration
+            agent_name = agent.__class__.__name__
+            description = getattr(agent, "agent_description", "No description")
+            print(f"Registered {agent_name}: {description}")
+            
+            # Emit event for dashboard/logging
+            self.bus.emit("agent.managed_agent_registered", {
+                "agent_type": agent_name,
+                "description": description,
+                "total_managed_agents": len(self._managed_agents)
+            })
+            
+        except Exception as e:
+            print(f"Error registering managed agent: {e}")
+            raise
+    
+    @abstractmethod
+    def _set_description(self) -> None:
+        """
+        Set the agent_description attribute for this agent.
+        Must be implemented by subclasses.
+        
+        Example:
+            self.agent_description = "Brief description of what this agent does"
+        """
+        raise NotImplementedError
+    
+    def add_managed_agent(self, agent: "BaseAgent") -> bool:
+        """
+        Dynamically add a managed agent at runtime.
+        
+        Args:
+            agent: BaseAgent instance to add
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            self._register_managed_agent(agent)
+            # Rebuild CodeAgent with new managed agents
+            if self._agent is not None:
+                self._rebuild_code_agent()
+            return True
+        except Exception as e:
+            self.bus.emit("agent.error", {
+                "operation": "add_managed_agent",
+                "error": str(e)
+            })
+            return False
+    
+    def remove_managed_agent(self, agent_name: str) -> bool:
+        """
+        Dynamically remove a managed agent by class name.
+        
+        Args:
+            agent_name: Class name of agent to remove (e.g., "VisionAgent")
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            with self._lock:
+                original_count = len(self._managed_agents)
+                self._managed_agents = [
+                    a for a in self._managed_agents
+                    if a.__class__.__name__ != agent_name
+                ]
+                
+                if len(self._managed_agents) == original_count:
+                    self.bus.emit("agent.error", {
+                        "operation": "remove_managed_agent",
+                        "agent_name": agent_name,
+                        "error": f"Agent '{agent_name}' not found"
+                    })
+                    return False
+                
+                # Trigger property setter to emit events and rebuild
+                self.managed_agents = self._managed_agents
+                
+                self.bus.emit("agent.managed_agent_removed", {
+                    "agent_name": agent_name,
+                    "remaining_count": len(self._managed_agents)
+                })
+                
+                return True
+        except Exception as e:
+            self.bus.emit("agent.error", {
+                "operation": "remove_managed_agent",
+                "agent_name": agent_name,
+                "error": str(e)
+            })
+            return False
+    
+    def create_managed_agent(self, agent_type: str) -> bool:
+        """
+        Dynamically create and add a managed agent by type.
+        
+        Args:
+            agent_type: Registered agent type name
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            agent = AgentFactory.create(
+                agent_type=agent_type,
+                state=self.state,
+                bus=self.bus,
+                registry=self.registry,
+                notifier=self.notifier,
+                store=self.store,
+                session_id=self.session_id
+            )
+            
+            if agent is None:
+                self.bus.emit("agent.creation_failed", {
+                    "agent_type": agent_type,
+                    "reason": f"Unknown agent type: {agent_type}"
+                })
+                return False
+            
+            self.add_managed_agent(agent)
+            
+            self.bus.emit("agent.created", {
+                "agent_type": agent_type,
+                "description": agent.agent_description
+            })
+            
+            return True
+            
+        except Exception as e:
+            self.bus.emit("agent.creation_failed", {
+                "agent_type": agent_type,
+                "reason": str(e)
+            })
+            return False
+    
+    def get_available_agent_types(self) -> List[str]:
+        """Get list of agent types that can be created."""
+        return AgentFactory.available_types()
+
+    def undelegate_agent(self, agent_name: str) -> bool:
+        """Alias for remove_managed_agent."""
+        return self.remove_managed_agent(agent_name)
 
 

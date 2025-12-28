@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Agent Management</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, Segoe UI, Arial; padding: 20px; background: #f5f5f5; }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .header h1 { font-size: 24px; }
+    
+    .section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .section h2 {
+      font-size: 18px;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #0066cc;
+      padding-bottom: 8px;
+    }
+    
+    .agent-card {
+      background: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .agent-info h3 {
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: #333;
+    }
+    
+    .agent-info p {
+      font-size: 12px;
+      color: #666;
+      margin: 0;
+    }
+    
+    .agent-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: #0066cc;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #0052a3;
+    }
+    
+    .btn-danger {
+      background: #cc3333;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #a32a2a;
+    }
+    
+    .btn-secondary {
+      background: #666;
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background: #555;
+    }
+    
+    .creation-form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    
+    select, input {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .event-list {
+      background: #111;
+      color: #0f0;
+      padding: 12px;
+      border-radius: 4px;
+      font-family: 'Monaco', monospace;
+      font-size: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .event-item {
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }
+    
+    .event-success { color: #0f0; }
+    .event-error { color: #f00; }
+    .event-info { color: #0ff; }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    
+    .status-active {
+      background: #0a0;
+      color: white;
+    }
+    
+    .status-inactive {
+      background: #999;
+      color: white;
+    }
+    
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+    }
+    
+    .empty-state {
+      color: #999;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    @media (max-width: 1200px) {
+      .grid-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Agent Management</h1>
+    <a href="/" style="padding: 8px 12px; background: #666; color: white; text-decoration: none; border-radius: 4px;">
+      ← Back to Dashboard
+    </a>
+  </div>
+
+  <div class="grid-3">
+    <!-- Managed Agents Section -->
+    <div class="section">
+      <h2>Active Managed Agents</h2>
+      <div id="managed-agents-list" hx-get="/api/agents/managed" hx-trigger="load, agentUpdated from:body" hx-target="#managed-agents-list" hx-swap="outerHTML">
+        Loading...
+      </div>
+    </div>
+
+    <!-- Create New Agent Section -->
+    <div class="section">
+      <h2>Create New Agent</h2>
+      <div class="creation-form">
+        <select id="agent-type-select" hx-get="/api/agents/types" hx-trigger="load" hx-swap="innerHTML">
+          <option value="">Loading agent types...</option>
+        </select>
+        <button class="btn-primary" hx-post="/api/agents/create" hx-vals="js:{agent_type: document.getElementById('agent-type-select').value}" hx-target="#managed-agents-list" hx-swap="outerHTML">
+          Create
+        </button>
+      </div>
+      <div id="agent-types-info" style="font-size: 12px; color: #666; margin-top: 8px;">
+        Select an agent type from the dropdown to create a new managed agent.
+      </div>
+    </div>
+
+    <!-- Manage Delegation Section -->
+    <div class="section">
+      <h2>Manage Delegation</h2>
+      <div class="creation-form" style="flex-direction: column;">
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <label style="font-size: 12px; width: 50px;">Parent:</label>
+          <select id="parent-agent-select" hx-get="/api/agents/instances" hx-trigger="load" hx-swap="innerHTML" style="flex: 1;">
+            <option value="">Loading instances...</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <label style="font-size: 12px; width: 50px;">Child:</label>
+          <select id="child-agent-select" hx-get="/api/agents/instances" hx-trigger="load" hx-swap="innerHTML" style="flex: 1;">
+            <option value="">Loading instances...</option>
+          </select>
+        </div>
+        <button class="btn-primary" hx-post="/api/agents/delegate" hx-vals="js:{parent_name: document.getElementById('parent-agent-select').value, child_name: document.getElementById('child-agent-select').value}" hx-target="#managed-agents-list" hx-swap="outerHTML" style="margin-top: 8px;">
+          Establish Delegation
+        </button>
+      </div>
+      <div style="font-size: 12px; color: #666; margin-top: 8px;">
+        Select a parent agent and a child agent to establish a delegation relationship.
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Log Section -->
+  <div class="section" style="margin-top: 20px;">
+    <h2>Agent Events</h2>
+    <div id="event-stream" class="event-list">
+      <div class="event-item event-info">Waiting for events...</div>
+    </div>
+  </div>
+
+  <script>
+    const eventStream = document.getElementById('event-stream');
+    
+    // Connect to event WebSocket
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      
+      // Filter for agent-related events
+      if (msg.type && (msg.type.startsWith('agent.') || msg.type.startsWith('agent_factory.'))) {
+        const timestamp = new Date().toLocaleTimeString();
+        const eventEl = document.createElement('div');
+        eventEl.className = 'event-item';
+        
+        if (msg.type.includes('error') || msg.type.includes('failed')) {
+          eventEl.classList.add('event-error');
+          eventEl.textContent = `[${timestamp}] ✗ ${msg.type}: ${JSON.stringify(msg.payload)}`;
+        } else if (msg.type.includes('created') || msg.type.includes('registered')) {
+          eventEl.classList.add('event-success');
+          eventEl.textContent = `[${timestamp}] ✓ ${msg.type}: ${JSON.stringify(msg.payload)}`;
+        } else {
+          eventEl.classList.add('event-info');
+          eventEl.textContent = `[${timestamp}] ℹ ${msg.type}: ${JSON.stringify(msg.payload)}`;
+        }
+        
+        eventStream.appendChild(eventEl);
+        eventStream.scrollTop = eventStream.scrollHeight;
+        
+        // Keep last 50 events
+        while (eventStream.children.length > 50) {
+          eventStream.removeChild(eventStream.firstChild);
+        }
+      }
+    };
+  </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ from typing import Any, Optional
 from smolagents import CodeAgent, RunResult
 
 from src.agents.base_agent import BaseAgent, SYSTEM_PROMPT, ToolEmbedder
+from src.agents.factory import AgentFactory
 from src.agents.sub_agents.vision_agent import VisionAgent
 from src.agents.core.events import EventBus
 from src.agents.core.registry import ToolRegistry
@@ -57,6 +58,9 @@ class MainAgent(BaseAgent):
         """
         # Initialize parent (BaseAgent)
         super().__init__(state, bus, registry, notifier, store, session_id)
+
+        # Set agent description
+        self._set_description()
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -79,6 +83,9 @@ class MainAgent(BaseAgent):
         # Initialize tools (calls parent's add_tool internally)
         self._init_tools()
         
+        # Initialize managed agents
+        self._init_managed_agents()
+
         # Initialize CodeAgent with current tools
         self._rebuild_code_agent()
         
@@ -89,6 +96,9 @@ class MainAgent(BaseAgent):
         print("Loading tool embedder (this may take a moment on first run)...")
         self.tool_embedder = ToolEmbedder()
         print(f"Tool embedder ready. Indexed {len(self.tools)} tools.")
+        
+        # Register available agent types for dynamic creation
+        self._register_agent_types()
     
     def _init_tools(self) -> None:
         """Initialize all smolagents-compatible tools."""
@@ -171,14 +181,43 @@ class MainAgent(BaseAgent):
         except Exception as e:
             print(f"Warning: Could not initialize discord tool: {e}")
     
-    def _managed_agents_list(self) -> None:
-        """Add managed agents"""
+    def _init_managed_agents(self) -> None:
+        """Initialize all managed agents."""
         try:
-            vision = VisionAgent()
-            self.managed_agents = [vision]
+            vision = VisionAgent(
+                state=self.state,
+                bus=self.bus,
+                registry=self.registry,
+                notifier=self.notifier,
+                store=self.store,
+                session_id=self.session_id
+            )
+            self._register_managed_agent(vision)  # One-liner with full setup
         except Exception as e:
             print(f"Warning: Could not initialize managed agents: {e}")
+    
+    def _set_description(self) -> None:
+        """Set description of this agent."""
+        self.agent_description = """MainAgent is a versatile agent suitable for general tasks that do not require vision or sophisticated browsing.
+It has access to tools for desktop control, web browsing, memory management, speech synthesis, file writing, and Discord interaction."""
+    
+    def _register_agent_types(self) -> None:
+        """Register available agent types for dynamic creation."""
+        try:
+            AgentFactory.register("vision", VisionAgent)
+            self.bus.emit("agent_factory.registered", {
+                "agent_type": "vision",
+                "description": "Vision analysis agent"
+            })
+        except Exception as e:
+            self.bus.emit("agent_factory.error", {
+                "agent_type": "vision",
+                "error": str(e)
+            })
 
+    def get_managed_agents_summary(self) -> list[dict[str, Any]]:
+        """Get summary of managed agents for dashboard/logging."""
+        return self.get_managed_agents_info()
 
     def _register_action_step_callback(self) -> None:
         """Register callback to capture smolagents ActionStep data."""

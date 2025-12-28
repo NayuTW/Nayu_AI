@@ -2,78 +2,244 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Agent Control Center</title>
+  <title>Nayu_AI Control Center</title>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <style>
-    body { font-family: system-ui, Segoe UI, Arial; margin: 16px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    pre { background: #111; color: #eee; padding: 8px; height: 300px; overflow: auto; white-space: pre-wrap; }
-    table { width: 100%; font-size: 14px; }
-    th, td { text-align: left; vertical-align: top; }
-    .ok { color: #0a0; } .bad { color: #a00; }
-    button { cursor: pointer; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, Segoe UI, Arial; padding: 20px; background: #f5f5f5; color: #333; }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .header h1 { font-size: 24px; color: #0066cc; }
+    
+    .section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .section h2 {
+      font-size: 18px;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #0066cc;
+      padding-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    
+    .data-table th {
+      text-align: left;
+      background: #f8f9fa;
+      padding: 10px;
+      border-bottom: 2px solid #dee2e6;
+      color: #495057;
+    }
+    
+    .data-table td {
+      padding: 10px;
+      border-bottom: 1px solid #dee2e6;
+      vertical-align: middle;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    
+    .status-active { background: #d4edda; color: #155724; }
+    .status-inactive { background: #f8d7da; color: #721c24; }
+    .status-info { background: #d1ecf1; color: #0c5460; }
+    
+    button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+    
+    .btn-primary { background: #0066cc; color: white; }
+    .btn-primary:hover { background: #0052a3; }
+    
+    .btn-secondary { background: #6c757d; color: white; }
+    .btn-secondary:hover { background: #5a6268; }
+    
+    .btn-danger { background: #dc3545; color: white; }
+    .btn-danger:hover { background: #c82333; }
+    
+    .event-list {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 12px;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px;
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #333;
+    }
+    
+    .event-item {
+      margin-bottom: 4px;
+      border-left: 2px solid #444;
+      padding-left: 8px;
+      line-height: 1.4;
+    }
+    
+    .event-type { color: #569cd6; font-weight: bold; }
+    .event-ts { color: #888; margin-right: 8px; }
+    
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    
+    .setting-item {
+      background: #f8f9fa;
+      padding: 12px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #e9ecef;
+    }
+    
+    .setting-label { font-weight: 600; font-size: 14px; }
+    
+    .health-list { list-style: none; }
+    .health-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+    }
+    
+    @media (max-width: 1024px) {
+      .grid-2, .settings-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body hx-get="/tools" hx-trigger="load" hx-target="#tools-container">
-  <h1>Agent Control Center</h1>
-
-  <div class="grid">
-    <div>
-      <h2>Tools</h2>
-      <div id="tools-container">Loading...</div>
-    </div>
-    <div>
-      <h2>Health</h2>
-      <div id="health-container" hx-get="/health" hx-trigger="load" hx-target="#health-container"></div>
-      <ul id="health-list"></ul>
+  <div class="header">
+    <h1>Nayu_AI Control Center</h1>
+    <div style="display: flex; gap: 12px;">
+        <a href="/agents" class="btn-primary" style="text-decoration: none; display: flex; align-items: center; padding: 8px 16px;">
+          Manage Agents →
+        </a>
     </div>
   </div>
 
-  <div class="grid" style="margin-top:16px">
-    <div>
+  <div class="section">
+    <h2>Tools Control Panel</h2>
+    <div id="tools-container">
+        <div style="text-align: center; padding: 20px; color: #666;">Loading tools...</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="section">
+      <h2>System Health</h2>
+      <div id="health-container" hx-get="/health" hx-trigger="load" hx-target="#health-container">
+          <ul id="health-list" class="health-list">
+              <li class="empty-state">Waiting for health updates...</li>
+          </ul>
+      </div>
+    </div>
+    
+    <div class="section">
       <h2>Settings</h2>
-      <div id="settings" hx-get="/settings" hx-trigger="load" hx-target="#settings">Loading...</div>
-    </div>
-    <div>
-      <h2>Live Events</h2>
-      <pre id="events"></pre>
+      <div id="settings" hx-get="/settings" hx-trigger="load" hx-target="#settings">
+          <div style="text-align: center; padding: 20px; color: #666;">Loading settings...</div>
+      </div>
     </div>
   </div>
 
-  <div style="margin-top:16px">
-    <h2>Dataset curation</h2>
-    <div id="examples-container" hx-get="/examples" hx-trigger="load" hx-target="#examples-container">Loading...</div>
+  <div class="section">
+    <h2>Live Event Stream</h2>
+    <div id="event-stream" class="event-list">
+      <div class="event-item" style="color: #888;">Connecting to event stream...</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Dataset Curation</h2>
+    <div id="examples-container" hx-get="/examples" hx-trigger="load" hx-target="#examples-container">
+        <div style="text-align: center; padding: 20px; color: #666;">Loading dataset...</div>
+    </div>
   </div>
 
   <script>
-    const eventsEl = document.getElementById('events');
+    const eventStream = document.getElementById('event-stream');
     const healthList = document.getElementById('health-list');
+    
     const ws = new WebSocket(`ws://${location.host}/ws`);
+    
     ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
+        
+        // Handle Init
         if (msg.type === 'init') {
             const payload = msg.payload || {};
+            eventStream.innerHTML = '';
             if (payload.events) {
-                payload.events.forEach(ev => {
-                    eventsEl.textContent += JSON.stringify(ev) + "\n";
-                });
-                eventsEl.scrollTop = eventsEl.scrollHeight;
+                payload.events.forEach(ev => appendEvent(ev.type, ev.payload, ev.ts));
             }
             return;
         }
+        
+        // Handle Health Updates
         if (msg.type === 'health.update') {
             healthList.innerHTML = '';
             const payload = msg.payload;
             for (const [k, v] of Object.entries(payload)) {
                 const li = document.createElement('li');
-                li.innerHTML = `<b>${k}</b>: <span class="${v.ok ? 'ok' : 'bad'}">${v.ok ? 'OK' : ('ERR: ' + (v.error || ''))}</span>`;
+                li.className = 'health-item';
+                const statusClass = v.ok ? 'status-active' : 'status-inactive';
+                const statusText = v.ok ? 'OK' : (v.error || 'ERROR');
+                li.innerHTML = `
+                    <span style="font-weight: 600;">${k}</span>
+                    <span class="status-badge ${statusClass}">${statusText}</span>
+                `;
                 healthList.appendChild(li);
             }
             return;
         }
-        eventsEl.textContent += JSON.stringify(msg) + "\n";
-        eventsEl.scrollTop = eventsEl.scrollHeight;
+        
+        // Append to event stream
+        appendEvent(msg.type, msg.payload, msg.ts);
 
+        // Trigger HTMX updates for specific events
         if (msg.type.startsWith('tool.')) {
             htmx.ajax('GET', '/tools', {target:'#tools-container', swap:'innerHTML'});
         }
@@ -84,6 +250,32 @@
             htmx.ajax('GET', '/examples', {target:'#examples-container', swap:'innerHTML'});
         }
     };
+
+    function appendEvent(type, payload, ts) {
+        const timestamp = ts ? new Date(ts * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+        const div = document.createElement('div');
+        div.className = 'event-item';
+        
+        // Color coding based on type
+        let typeStyle = '';
+        if (type.includes('error') || type.includes('fail')) typeStyle = 'color: #f44747;';
+        else if (type.includes('success') || type.includes('created')) typeStyle = 'color: #4ec9b0;';
+        else if (type.includes('tool')) typeStyle = 'color: #ce9178;';
+        
+        div.innerHTML = `
+            <span class="event-ts">[${timestamp}]</span>
+            <span class="event-type" style="${typeStyle}">${type}</span>
+            <span class="event-payload">${JSON.stringify(payload)}</span>
+        `;
+        
+        eventStream.appendChild(div);
+        eventStream.scrollTop = eventStream.scrollHeight;
+        
+        // Limit to 100 events
+        while (eventStream.children.length > 100) {
+            eventStream.removeChild(eventStream.firstChild);
+        }
+    }
   </script>
 </body>
 </html>

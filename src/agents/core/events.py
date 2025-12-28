@@ -41,3 +41,15 @@ class EventBus:
                 q.put_nowait(ev)
             except asyncio.QueueFull:
                 pass
+
+    def emit(self, event_type: str, payload: Any = None):
+        """
+        Synchronous wrapper for publish. 
+        Uses asyncio.create_task to publish the event without blocking.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.publish(event_type, payload))
+        except RuntimeError:
+            # No running loop, just ignore or log
+            pass

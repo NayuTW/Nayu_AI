@@ -34,8 +34,12 @@ class VisionSmolTool(Tool):
     }
     output_type = "string"
 
+    def __init__(self, model_id: str = "gemma3:4b", api_base: str = "http://localhost:11434", timeout: int = 60):
+        super().__init__()
+        self.model_id = model_id
+        self.generate_url = f"{api_base}/api/generate"
+        self.timeout = timeout
 
-    
     def forward(self, path: str, prompt: Optional[str] = None) -> str:
         """Analyze the image and return description."""
         
@@ -59,15 +63,33 @@ class VisionSmolTool(Tool):
             import asyncio
             try:
                 # Check if we're in an existing event loop
-                asyncio.get_running_loop()
-                # If we get here, we're in a running loop - not supported yet
-                return "Error: Vision tool cannot be called from within an async context. Please call from sync context."
+                loop = asyncio.get_running_loop()
+                
+                # If we are in a loop, we can't use asyncio.run().
+                # Since forward() is sync, we must run the coroutine in a separate thread
+                # to avoid blocking the loop or causing "asyncio.run() cannot be called from a running event loop"
+                import threading
+                result_container = []
+                exception_container = []
+                
+                def run_in_new_loop():
+                    try:
+                        res = asyncio.run(self._analyze_image_async(path, prompt))
+                        result_container.append(res)
+                    except Exception as e:
+                        exception_container.append(e)
+                
+                thread = threading.Thread(target=run_in_new_loop)
+                thread.start()
+                thread.join()
+                
+                if exception_container:
+                    raise exception_container[0]
+                return result_container[0]
+                
             except RuntimeError:
                 # No running loop, safe to use asyncio.run()
-                pass
-            
-            result = asyncio.run(self._analyze_image_async(path, prompt))
-            return result
+                return asyncio.run(self._analyze_image_async(path, prompt))
         
         except Exception as e:
             return f"Error analyzing image: {str(e)}"
