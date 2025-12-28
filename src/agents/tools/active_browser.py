@@ -14,7 +14,6 @@ from smolagents.agents import ActionStep
 
 load_dotenv()
 
-
 @tool
 def search_item_ctrl_f(text: str, nth_result: int = 1) -> str:
     """
@@ -23,6 +22,8 @@ def search_item_ctrl_f(text: str, nth_result: int = 1) -> str:
         text: The text to search for
         nth_result: Which occurrence to jump to (default: 1)
     """
+    name = "search_item_ctrl_f"
+    description = "Searches for text on the current page via Ctrl + F and jumps to the nth occurrence."
     elements = driver.find_elements(By.XPATH, f"//*[contains(text(), '{text}')]")
     if nth_result > len(elements):
         raise Exception(f"Match n°{nth_result} not found (only {len(elements)} matches found)")
@@ -36,6 +37,8 @@ def search_item_ctrl_f(text: str, nth_result: int = 1) -> str:
 @tool
 def go_back() -> None:
     """Goes back to previous page"""
+    name = "go_back"
+    description = "Goes back to previous page"
     driver.back()
 
 
@@ -45,6 +48,8 @@ def close_popups() -> str:
     Closes any visible modal or pop-up on the page. Use this to dismiss pop-up windows!
     This does not work on cookie consent banenrs
     """
+    name = "close_popups"
+    description = "Closes any visible modal or pop-up on the page. Use this to dismiss pop-up windows!"
     webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
 
 
@@ -56,8 +61,14 @@ chrome_options.add_argument("--disable-pdf-viewer")
 chrome_options.add_argument("--window-position=0,0")
 
 
-# Initialize browser
-driver = helium.start_chrome(headless=False, options=chrome_options)
+@tool
+def start_browser() -> None:
+    """Starts the helium browser instance."""
+    name = "start_browser"
+    description = "Starts the helium browser instance."
+    global driver
+    driver = helium.start_chrome(headless=False, options=chrome_options)
+    agent.python_executor("driver = helium.get_driver()")
 
 
 # Screenshot callback
@@ -79,29 +90,6 @@ def save_screenshot(memory_step: ActionStep, agent: CodeAgent) -> None:
     memory_step.observations = (
         url_info if memory_step.observations is None else memory_step.observations + "\n" + url_info
     )
-
-
-from smolagents import LiteLLMModel
-
-
-# Init model
-model = LiteLLMModel(
-    model_id="ollama/gemma3:12b-it-q4_K_M",
-    api_base="http://localhost:11434",
-    flatten_messages_as_text=False,
-    ollama_url="http://localhost:11434",
-    generate_url="http://localhost:11434/api/generate",
-    num_ctx=12000,
-)
-
-agent = CodeAgent(
-    tools=[go_back, close_popups, search_item_ctrl_f],
-    model=model,
-    additional_authorized_imports=["helium"],
-    step_callbacks=[save_screenshot],
-    max_steps=20,
-    verbosity_level=2,
-)
 
 
 # Import helium for agent
@@ -155,9 +143,6 @@ if Text('Accept cookies?').exists():
 """
 
 
-search_request = """
-    Please navigate to https://en.wikipedia.org/wiki/Chicago and give me a sentence containing the word "1992" that mentions a construction accident.
-"""
 
 
 agent_output = agent.run(search_request + helium_instructions)
