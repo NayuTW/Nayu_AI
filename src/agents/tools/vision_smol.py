@@ -7,12 +7,8 @@ import base64
 from typing import Optional
 from smolagents import Tool
 
-try:
-    import aiohttp
-    from PIL import Image
-    VISION_AVAILABLE = True
-except ImportError:
-    VISION_AVAILABLE = False
+import aiohttp
+from PIL import Image
 
 
 class VisionSmolTool(Tool):
@@ -37,19 +33,45 @@ class VisionSmolTool(Tool):
         }
     }
     output_type = "string"
+
+
     
-    def __init__(self, model_id: str = "gemma3:12b-it-q4_K_M", ollama_url: str = "http://localhost:11434", timeout: int = 120):
-        super().__init__()
-        if not VISION_AVAILABLE:
-            raise ImportError(
-                "Vision tools not available. Install with: pip install aiohttp Pillow"
-            )
+    def forward(self, path: str, prompt: Optional[str] = None) -> str:
+        """Analyze the image and return description."""
         
-        self.model_id = model_id
-        self.ollama_url = ollama_url
-        self.generate_url = f"{ollama_url}/api/generate"
-        self.timeout = timeout
-    
+        # Validate path
+        if not path or not path.strip():
+            return "Error: path parameter is required and cannot be empty"
+        
+        # Check if file exists
+        if not os.path.exists(path):
+            return f"Error: Image file not found at path: {path}"
+        
+        # Default prompt
+        if prompt is None:
+            prompt = "Describe the image briefly with actionable details."
+        
+        try:
+            # Validate it's a valid image by opening it
+            Image.open(path).convert("RGB")
+            
+            # Run async analysis in sync context
+            import asyncio
+            try:
+                # Check if we're in an existing event loop
+                asyncio.get_running_loop()
+                # If we get here, we're in a running loop - not supported yet
+                return "Error: Vision tool cannot be called from within an async context. Please call from sync context."
+            except RuntimeError:
+                # No running loop, safe to use asyncio.run()
+                pass
+            
+            result = asyncio.run(self._analyze_image_async(path, prompt))
+            return result
+        
+        except Exception as e:
+            return f"Error analyzing image: {str(e)}"
+   
     def _encode_image(self, image_path: str) -> str:
         """Encode image to base64 string."""
         with open(image_path, "rb") as image_file:
@@ -86,38 +108,3 @@ class VisionSmolTool(Tool):
                     raise RuntimeError("Ollama returned empty response")
                 
                 return response_text
-    
-    def forward(self, path: str, prompt: Optional[str] = None) -> str:
-        """Analyze the image and return description."""
-        # Validate path
-        if not path or not path.strip():
-            return "Error: path parameter is required and cannot be empty"
-        
-        # Check if file exists
-        if not os.path.exists(path):
-            return f"Error: Image file not found at path: {path}"
-        
-        # Default prompt
-        if prompt is None:
-            prompt = "Describe the image briefly with actionable details."
-        
-        try:
-            # Validate it's a valid image by opening it
-            Image.open(path).convert("RGB")
-            
-            # Run async analysis in sync context
-            import asyncio
-            try:
-                # Check if we're in an existing event loop
-                asyncio.get_running_loop()
-                # If we get here, we're in a running loop - not supported yet
-                return "Error: Vision tool cannot be called from within an async context. Please call from sync context."
-            except RuntimeError:
-                # No running loop, safe to use asyncio.run()
-                pass
-            
-            result = asyncio.run(self._analyze_image_async(path, prompt))
-            return result
-        
-        except Exception as e:
-            return f"Error analyzing image: {str(e)}"
