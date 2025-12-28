@@ -8,8 +8,8 @@ This PR migrates the entire Nayu_AI application from a custom LLM-based orchestr
 
 ### New Files
 - `src/agents/llm/litellm_model.py` - LiteLLM wrapper for Ollama
-- `src/agents/main_agent_smol.py` → `src/agents/main_agent.py` - New main agent using CodeAgent
-- `src/app_smol.py` → `src/app.py` - Updated application entry point
+- `src/agents/sub_agents/main_agent.py` - Main agent using CodeAgent on top of `BaseAgent`
+- `src/app.py` - Updated application entry point for smolagents architecture
 - `src/agents/tools/memory_smol.py` - Memory tool using smolagents Tool class
 - `src/agents/tools/desktop_smol.py` - Desktop control tool using smolagents
 - `src/agents/tools/vision_smol.py` - Vision analysis tool using smolagents
@@ -24,8 +24,7 @@ This PR migrates the entire Nayu_AI application from a custom LLM-based orchestr
 - `src/agents/tools/__init__.py` - Added graceful imports for all tools
 
 ### Preserved Files
-- `src/app_original.py` - Backup of original app
-- `src/agents/main_agent_original.py` - Backup of original main agent
+- `src/agents/main_agent_smol.py` - Legacy smolagents main agent retained for reference
 - All original tool files remain unchanged
 
 ## Key Features
@@ -146,11 +145,7 @@ All environment variables remain the same:
 
 ## Rollback
 
-To revert to original implementation:
-```bash
-cp src/app_original.py src/app.py
-cp src/agents/main_agent_original.py src/agents/main_agent.py
-```
+To use the legacy smolagents implementation with the previous prompt and tool wiring, import `MainAgentSmol` from `src/agents/main_agent_smol.py` inside `src/app.py` instead of the sub-agent `MainAgent`.
 
 ## Documentation
 

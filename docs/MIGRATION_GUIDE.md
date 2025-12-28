@@ -73,9 +73,9 @@ class MemorySmolTool(Tool):
 
 ### 3. Main Agent (CodeAgent)
 
-**File**: `src/agents/main_agent.py` (was `main_agent_smol.py`)
+**File**: `src/agents/sub_agents/main_agent.py` (replaces legacy `main_agent_smol.py`)
 
-The new `MainAgentSmol` class uses smolagents' `CodeAgent`:
+The `MainAgent` class uses smolagents' `CodeAgent` on top of the shared `BaseAgent` infrastructure:
 
 ```python
 from smolagents import CodeAgent
@@ -96,10 +96,10 @@ Key differences:
 
 ### 4. Application Entry Point
 
-**File**: `src/app.py` (was `app_smol.py`)
+**File**: `src/app.py`
 
 Minimal changes to the main application:
-- Imports `MainAgentSmol` instead of `MainAgent`
+- Imports `MainAgent` from `src/agents/sub_agents/main_agent.py`
 - Uses `SpeechSmolTool` for notifier
 - Everything else (Dashboard, Discord, CLI) unchanged
 
@@ -154,24 +154,19 @@ The `OllamaLiteLLMModel` accepts these parameters:
 - `model_id`: Ollama model name (auto-prefixed with `ollama_chat/`)
 - `api_base`: Ollama API URL (default: `http://localhost:11434`)
 - `api_key`: Not needed for Ollama (default: `"dummy"`)
-- `num_ctx`: Context window size (default: `24576`)
-- `temperature`: Sampling temperature (default: `0.7`)
+- `num_ctx`: Context window size (default: `4096`)
+- `temperature`: Sampling temperature (default: `0.6`)
 
 ## Backward Compatibility
 
 ### Original Files Preserved
 
-- `src/app_original.py`: Original application entry point
-- `src/agents/main_agent_original.py`: Original main agent
+- `src/agents/main_agent_smol.py`: Legacy smolagents main agent kept for reference
 - All original tool files (`webbrowser.py`, `desktop.py`, etc.) remain available
 
 ### Switching Back
 
-To revert to the original implementation:
-```bash
-cp src/app_original.py src/app.py
-cp src/agents/main_agent_original.py src/agents/main_agent.py
-```
+To use the legacy implementation, update `src/app.py` to import `MainAgentSmol` from `src/agents/main_agent_smol.py` instead of the sub-agent version.
 
 ## Key Differences in Behavior
 

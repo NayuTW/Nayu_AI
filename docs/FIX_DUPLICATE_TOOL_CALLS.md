@@ -72,7 +72,7 @@ class DiscordSmolTool(Tool):
             await self.discord_service.send_channel_target(target, message)
 ```
 
-#### 2. Updated `main_agent_smol.py`
+#### 2. Updated main agent (`src/agents/sub_agents/main_agent.py`)
 
 Changed `add_discord_tool()` to use the direct tool instead of the nested agent wrapper:
 
@@ -182,7 +182,7 @@ class MyAgentTool(Tool):
 
 - `src/agents/tools/discord_tool_smol.py` - Direct Discord tool (✓ use this)
 - `src/agents/tools/discord_agent_tool.py` - Deprecated nested agent (❌ don't use)
-- `src/agents/main_agent_smol.py` - Main agent using direct tools
+- `src/agents/sub_agents/main_agent.py` - Main agent using direct tools
 - `test_discord_tool_fix.py` - Test suite for the fix
 
 ## References

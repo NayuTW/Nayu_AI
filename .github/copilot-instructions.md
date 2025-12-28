@@ -15,8 +15,9 @@ Nayu_AI is a fully local, Python-based multi-agent orchestrator system designed 
 
 ### Core Components
 
-1. **Main Agent** (`src/agents/main_agent.py`)
+1. **Main Agent** (`src/agents/sub_agents/main_agent.py`)
    - Orchestrator using Ollama LLM (qwen2:7b-instruct-q5_K_M by default)
+   - Inherits shared prompt/session logic from `src/agents/base_agent.py`
    - Manages tool registry and coordinates sub-agents
    - Maintains shared state via blackboard pattern
 
@@ -65,7 +66,9 @@ src/
 │   ├── notify/        # Notification and error speech system
 │   ├── sandbox/       # Code execution guardrails
 │   ├── tools/         # Individual tool implementations
-│   ├── main_agent.py  # Main orchestrator
+│   ├── sub_agents/    # Specialized orchestrators (main_agent.py, vision_agent.py)
+│   ├── base_agent.py  # Shared orchestration, prompt, session manager
+│   ├── factory.py     # Agent registry/creation helpers
 │   └── state.py       # Shared state management
 ├── dashboard/         # FastAPI dashboard server
 └── app.py            # Application entry point

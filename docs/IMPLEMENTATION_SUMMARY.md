@@ -46,7 +46,7 @@ Agent: Sure, I'll edit report.txt. What changes would you like?
 
 ### Modified Components
 
-1. **MainAgentSmol** (`src/agents/main_agent_smol.py`)
+1. **MainAgent** (`src/agents/sub_agents/main_agent.py`)
    - Added SessionManager initialization
    - Updated `handle_user_message()` to:
      - Retrieve session context

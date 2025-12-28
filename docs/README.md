@@ -1,8 +1,8 @@
 # Local Multi‑Agent Orchestrator (Fully Offline, Dashboard + Curation)
 
 A fully local, Python multi‑agent system designed to run on a single GPU (12GB VRAM) and 32GB RAM, with:
-- Main orchestrator using smolagents CodeAgent with Ollama LLM backend for structured tool/function calling
-- Sub‑agents as smolagents-compatible tools (web, desktop, vision, speech, memory, code execution)
+- Main orchestrator (`src/agents/sub_agents/main_agent.py`) built on smolagents CodeAgent with Ollama LLM backend and shared `BaseAgent` prompt/session logic
+- Sub‑agents and smolagents-compatible tools in `src/agents/sub_agents/` and `src/agents/tools/*_smol.py` (web, desktop, vision, speech, memory, code execution)
 - Nested CodeAgent for sandboxed code execution with guardrails (import allowlist, file/network controls, step/output caps)
 - Markdown Browser sub‑agent with embedding-based ranking (local embedding model) for token‑efficient web research
 - Memory with local embeddings (Chroma + fastembed/sentence-transformers)

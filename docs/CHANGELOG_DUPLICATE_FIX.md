@@ -37,7 +37,7 @@ Fixed the issue where Discord tool calls would be duplicated and multiple final_
 
 ### Files Modified
 
-1. **`src/agents/main_agent_smol.py`** (24 lines changed)
+1. **`src/agents/sub_agents/main_agent.py`** (24 lines changed)
    - Changed `add_discord_tool()` to use `DiscordSmolTool` instead of `DiscordAgentTool`
    - Updated system prompt to reference "discord tool" instead of "discord_agent"
    - Changed registry name from "discord_agent" to "discord"

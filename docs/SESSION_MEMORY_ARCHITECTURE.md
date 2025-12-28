@@ -17,8 +17,8 @@ This document describes the technical architecture of the session memory system.
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    MainAgentSmol                                 │
-│  (src/agents/main_agent_smol.py)                                │
+│                    MainAgent                                    │
+│  (src/agents/sub_agents/main_agent.py)                          │
 │  - Initializes SessionManager                                    │
 │  - Assembles context from session, working set, and messages    │
 │  - Persists user and assistant messages                         │
@@ -223,7 +223,7 @@ def _generate_summary(self, state: SessionState):
 
 Extract artifacts from tool calls:
 ```python
-# After tool call in main_agent_smol.py
+# After tool call in src/agents/sub_agents/main_agent.py
 if tool_name == "webbrowser" and "url" in tool_result:
     self.update_working_set(
         session_id=session_id,

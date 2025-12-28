@@ -34,7 +34,7 @@ The `TOOL_CALLING_PROMPT_TEMPLATE` in `src/agents/llm/ollama_client.py` has been
 
 ### 2. Enhanced System Prompt
 
-The `SYSTEM_PROMPT` in `src/agents/main_agent.py` now:
+The `SYSTEM_PROMPT` in `src/agents/base_agent.py` now:
 - Emphasizes being "helpful, friendly" and prioritizes natural conversation
 - Explicitly states to only use tools when specifically required
 - Warns against generating code examples, tests, or documentation unless requested
@@ -166,7 +166,7 @@ export TTS_REF_TEXT="The transcript of the reference audio"
 ## Further Customization
 
 If you need to further customize the prompts:
-- `src/agents/main_agent.py`: Edit `SYSTEM_PROMPT` for overall behavior
+- `src/agents/base_agent.py`: Edit `SYSTEM_PROMPT` for overall behavior
 - `src/agents/llm/ollama_client.py`: Edit `TOOL_CALLING_PROMPT_TEMPLATE` for JSON response format
 
 Remember to restart the application after changing Python files.
