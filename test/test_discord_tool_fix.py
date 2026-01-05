@@ -85,19 +85,19 @@ def test_discord_tool_forward():
 
 
 def test_no_nested_agent_in_main_agent():
-    """Verify that MainAgentSmol uses DiscordSmolTool directly, not DiscordAgentTool."""
+    """Verify that MainAgent uses DiscordSmolTool directly, not DiscordAgentTool."""
     import ast
     import inspect
     from pathlib import Path
     
     try:
-        from src.agents.main_agent_smol import MainAgentSmol
-        # Get the source code of add_discord_tool method
-        source = inspect.getsource(MainAgentSmol.add_discord_tool)
-    except ModuleNotFoundError as e:
-        print(f"⚠ Skipping MainAgentSmol import test (missing dependency: {e})")
+        from src.agents.sub_agents.main_agent import MainAgent
+        # Get the source code of _init_tools method
+        source = inspect.getsource(MainAgent._init_tools)
+    except (ModuleNotFoundError, AttributeError) as e:
+        print(f"⚠ Skipping MainAgent import test (missing dependency or method: {e})")
         # Fallback: read the source file directly using pathlib
-        source_file = Path(__file__).parent / "src" / "agents" / "main_agent_smol.py"
+        source_file = Path(__file__).parent / "src" / "agents" / "sub_agents" / "main_agent.py"
         with open(source_file, "r") as f:
             full_source = f.read()
         
@@ -105,9 +105,9 @@ def test_no_nested_agent_in_main_agent():
         tree = ast.parse(full_source)
         method_source = None
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name == "MainAgentSmol":
+            if isinstance(node, ast.ClassDef) and node.name == "MainAgent":
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef) and item.name == "add_discord_tool":
+                    if isinstance(item, ast.FunctionDef) and item.name == "_init_tools":
                         # Get the source lines for this method
                         method_lines = full_source.split('\n')[item.lineno-1:item.end_lineno]
                         method_source = '\n'.join(method_lines)
@@ -115,12 +115,12 @@ def test_no_nested_agent_in_main_agent():
                 break
         
         if not method_source:
-            raise RuntimeError("Could not find add_discord_tool method")
+            raise RuntimeError("Could not find _init_tools method")
         
         source = method_source
-        print("✓ MainAgentSmol uses DiscordSmolTool directly (no nested agent) [verified from AST]")
+        print("✓ MainAgent uses DiscordSmolTool directly (no nested agent) [verified from AST]")
     else:
-        print("✓ MainAgentSmol uses DiscordSmolTool directly (no nested agent)")
+        print("✓ MainAgent uses DiscordSmolTool directly (no nested agent)")
     
     # Verify it imports DiscordSmolTool, not DiscordAgentTool
     assert "DiscordSmolTool" in source, "Should import DiscordSmolTool"

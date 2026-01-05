@@ -205,4 +205,8 @@ class WriteFileSmolTool(Tool):
         except OSError as e:
             return f"Error: File operation failed - {str(e)}"
         except Exception as e:
+<<<<<<< HEAD
             return f"Error: Unexpected error while writing file - {str(e)}"
+=======
+            return f"Error: Unexpected error while writing file - {str(e)}"
+>>>>>>> main

@@ -73,9 +73,9 @@ class MemorySmolTool(Tool):
 
 ### 3. Main Agent (CodeAgent)
 
-**File**: `src/agents/main_agent.py` (was `main_agent_smol.py`)
+**File**: `src/agents/main_agent.py` (was `main_agent.py`)
 
-The new `MainAgentSmol` class uses smolagents' `CodeAgent`:
+The new `MainAgent` class uses smolagents' `CodeAgent`:
 
 ```python
 from smolagents import CodeAgent
@@ -99,7 +99,7 @@ Key differences:
 **File**: `src/app.py` (was `app_smol.py`)
 
 Minimal changes to the main application:
-- Imports `MainAgentSmol` instead of `MainAgent`
+- Imports `MainAgent` instead of `MainAgent`
 - Uses `SpeechSmolTool` for notifier
 - Everything else (Dashboard, Discord, CLI) unchanged
 
@@ -251,7 +251,7 @@ This tests:
 - smolagents core imports
 - OllamaLiteLLMModel creation
 - All tool imports and creation
-- MainAgentSmol initialization
+- MainAgent initialization
 
 ### Integration Tests
 
@@ -305,7 +305,7 @@ Potential improvements enabled by smolagents:
 - [x] Install smolagents and litellm
 - [x] Convert all tools to smolagents Tool class
 - [x] Create OllamaLiteLLMModel wrapper
-- [x] Create MainAgentSmol with CodeAgent
+- [x] Create MainAgent with CodeAgent
 - [x] Update app.py entry point
 - [x] Preserve original files
 - [x] Add graceful import handling

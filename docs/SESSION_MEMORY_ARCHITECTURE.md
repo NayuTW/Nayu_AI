@@ -17,8 +17,8 @@ This document describes the technical architecture of the session memory system.
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    MainAgentSmol                                 │
-│  (src/agents/main_agent_smol.py)                                │
+│                    MainAgent                                 │
+│  (src/agents/main_agent.py)                                │
 │  - Initializes SessionManager                                    │
 │  - Assembles context from session, working set, and messages    │
 │  - Persists user and assistant messages                         │
@@ -93,7 +93,7 @@ This document describes the technical architecture of the session memory system.
 ```
 1. User enters message in CLI
    ↓
-2. MainAgentSmol.handle_user_message()
+2. MainAgent.handle_user_message()
    ↓
 3. SessionManager.get_context(session_id)
    - Returns: (summary, working_set, messages)
@@ -129,7 +129,7 @@ This document describes the technical architecture of the session memory system.
 ```
 1. User types /reset-session
    ↓
-2. MainAgentSmol.reset_session()
+2. MainAgent.reset_session()
    ↓
 3. SessionManager.reset_session(session_id)
    - Remove from cache
@@ -223,7 +223,7 @@ def _generate_summary(self, state: SessionState):
 
 Extract artifacts from tool calls:
 ```python
-# After tool call in main_agent_smol.py
+# After tool call in main_agent.py
 if tool_name == "webbrowser" and "url" in tool_result:
     self.update_working_set(
         session_id=session_id,

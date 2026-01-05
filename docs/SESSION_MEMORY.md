@@ -82,7 +82,7 @@ Session session-1730626431-a4b2f3e1 has been reset. Conversation history cleared
 
 ## Configuration
 
-Session manager settings can be configured when initializing `MainAgentSmol`:
+Session manager settings can be configured when initializing `MainAgent`:
 
 ```python
 session_manager = SessionManager(
@@ -111,7 +111,7 @@ session_manager = SessionManager(
    - Tracks last_task, artifacts, and environment context
    - Provides formatted context strings for prompts
 
-4. **Integration** (`src/agents/main_agent_smol.py`)
+4. **Integration** (`src/agents/main_agent.py`)
    - Session context is assembled in `handle_user_message()`
    - Messages are added to session before and after agent execution
    - Working set can be updated after tool calls (future enhancement)
