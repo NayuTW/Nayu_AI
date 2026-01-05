@@ -1,6 +1,6 @@
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 @dataclass
 class ToolStats:
@@ -17,16 +17,16 @@ class ToolStats:
 class RegisteredTool:
     name: str
     impl: Any
-    spec: Dict[str, Any]
+    spec: dict[str, Any]
     stats: ToolStats = field(default_factory=ToolStats)
     circuit_breaker_threshold: int = 3
 
 class ToolRegistry:
     def __init__(self, store=None):
-        self._tools: Dict[str, RegisteredTool] = {}
+        self._tools: dict[str, RegisteredTool] = {}
         self._store = store
 
-    def register(self, name: str, impl: Any, spec: Dict[str, Any], breaker_threshold: int = 3):
+    def register(self, name: str, impl: Any, spec: dict[str, Any], breaker_threshold: int = 3):
         self._tools[name] = RegisteredTool(name=name, impl=impl, spec=spec, circuit_breaker_threshold=breaker_threshold)
         self._persist(name)
 

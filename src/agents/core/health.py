@@ -1,7 +1,6 @@
 import asyncio
 import socket
 import aiohttp
-from typing import Dict
 import os
 
 class HealthChecker:
@@ -28,8 +27,8 @@ class HealthChecker:
             await self.bus.publish("health.update", status)
             await asyncio.sleep(self.interval_s)
 
-    async def _gather(self) -> Dict:
-        status: Dict[str, Dict] = {}
+    async def _gather(self) -> dict:
+        status: dict[str, dict] = {}
 
         try:
             async with aiohttp.ClientSession() as s:

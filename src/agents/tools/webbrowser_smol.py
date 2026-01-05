@@ -2,7 +2,7 @@
 Smolagents-compatible wrapper for WebBrowserTool.
 Used by CodeAgent which requires the smolagents Tool interface.
 """
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 from smolagents import Tool
 
 from src.agents.tools.webbrowser import (

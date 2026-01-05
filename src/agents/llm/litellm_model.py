@@ -2,7 +2,7 @@
 LiteLLMModel wrapper for Ollama integration using smolagents framework.
 """
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 import litellm
 
 try:
@@ -12,7 +12,7 @@ try:
 except ImportError:
     SMOLAGENTS_AVAILABLE = False
     BaseLiteLLMModel = object  # type: ignore
-    ChatMessage = Dict[str, Any]  # type: ignore
+    ChatMessage = dict[str, Any]  # type: ignore
 
 
 class OllamaLiteLLMModel(BaseLiteLLMModel if SMOLAGENTS_AVAILABLE else object):
