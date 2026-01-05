@@ -172,7 +172,7 @@ async def test_end_to_end_flow():
         
         summary, working_set, messages = session_manager.get_context(session_id_3)
         
-        # Simulate prompt assembly like in main_agent_smol.py
+        # Simulate prompt assembly like in main_agent.py
         conversation_history = "\n".join([
             f"{'User' if m.role == 'user' else 'Assistant'}: {m.content}"
             for m in messages[-10:]

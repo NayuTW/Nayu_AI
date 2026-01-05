@@ -14,17 +14,18 @@ from src.agents.core.store import SQLiteStore
 from src.agents.notify.notifier import Notifier
 from src.agents.notify.error_speaker import ErrorSpeaker
 from src.agents.tools.speech_smol import SpeechSmolTool
-from src.agents.main_agent_smol import MainAgentSmol
+from src.agents.sub_agents.main_agent import MainAgent
+from src.agents.factory import AgentFactory
 
 from src.dashboard.server import init_dashboard
 
 logger = logging.getLogger(__name__)
 
 
-async def start_dashboard(bus, registry, health, store, notifier):
+async def start_dashboard(bus, registry, health, store, notifier, agent):
     """Start the FastAPI dashboard server."""
     from src.dashboard.server import app
-    init_dashboard(bus, registry, health, store, notifier)
+    init_dashboard(bus, registry, health, store, notifier, agent)
     host = os.getenv("AGENT_DASH_HOST", "0.0.0.0")
     port = int(os.getenv("AGENT_DASH_PORT", "8008"))
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
@@ -92,8 +93,8 @@ async def main():
     session_id = f"session-{int(time.time())}-{uuid.uuid4().hex[:8]}"
     
     # Initialize main agent (smolagents CodeAgent)
-    logger.info("Initializing MainAgentSmol with smolagents CodeAgent...")
-    agent = MainAgentSmol(
+    logger.info("Initializing MainAgent with smolagents CodeAgent...")
+    agent = MainAgent(
         state=state,
         bus=bus,
         registry=registry,
@@ -128,29 +129,12 @@ async def main():
     flush_task = asyncio.create_task(periodic_flush())
 
     # Start dashboard
-    asyncio.create_task(start_dashboard(bus, registry, health, store, notifier))
+    asyncio.create_task(start_dashboard(bus, registry, health, store, notifier, agent))
     
     # Start Discord bot if configured
     discord_service = await start_discord_bot(agent)
-
-    # Add Discord tool to main agent if available
     if discord_service:
-        try:
-            # Add the smolagents-compatible Discord tool to the main agent
-            if agent.add_discord_tool(discord_service):
-                logger.info("Discord tool integrated into main agent")
-            
-            # Also add Discord tool to CodeAgent's allowed tools for nested execution
-            try:
-                from src.agents.tools.discord_smol import DiscordSendChannelTool
-                codeexec_rt = agent.registry.get("codeexec")
-                if codeexec_rt and hasattr(codeexec_rt.impl, "allowed_tools"):
-                    codeexec_rt.impl.allowed_tools.append(DiscordSendChannelTool(discord_service))
-                    logger.info("Added DiscordSendChannelTool to nested CodeAgent")
-            except Exception as e:
-                logger.exception("Failed to add Discord to nested CodeAgent: %s", e)
-        except Exception as e:
-            logger.exception("Failed to integrate Discord tool: %s", e)
+        agent.set_discord_service(discord_service)
 
     # Print startup information
     print("=" * 60)
@@ -162,11 +146,16 @@ async def main():
     print(f"Session: {session_id}")
     print()
     print("Commands:")
-    print("  'voice on'       - Enable voice notifications")
-    print("  'voice off'      - Disable voice notifications")
-    print("  '/reset-session' - Clear conversation history")
-    print("  '/sessions'      - List all sessions")
-    print("  'quit'           - Exit the application")
+    print("  'voice on'        - Enable voice notifications")
+    print("  'voice off'       - Disable voice notifications")
+    print("  '/reset-session'  - Clear conversation history")
+    print("  '/sessions'       - List all sessions")
+    print("  '/list-agents'    - List all agents and available types")
+    print("  '/add-agent <type>' - Create a new managed agent")
+    print("  '/remove-agent <name>' - Remove a managed agent")
+    print("  '/delegate <parent> <child>' - Delegate an existing agent to another")
+    print("  '/undelegate <parent> <child>' - Remove delegation between agents")
+    print("  'quit'            - Exit the application")
     print("=" * 60)
     print()
     
@@ -213,6 +202,105 @@ async def main():
                         print(f"  - {s}{current}")
                 else:
                     print("No saved sessions found.")
+                continue
+            
+            # Handle dynamic agent management commands
+            if user.strip().lower().startswith("/add-agent"):
+                parts = user.strip().split()
+                if len(parts) < 2:
+                    available = agent.get_available_agent_types()
+                    print("Usage: /add-agent <type>")
+                    if available:
+                        print(f"Available types: {', '.join(available)}")
+                    else:
+                        print("No agent types available to create")
+                    continue
+                
+                agent_type = parts[1].lower()
+                if agent.create_managed_agent(agent_type):
+                    print(f"✓ {agent_type} agent added successfully")
+                else:
+                    print(f"✗ Failed to add {agent_type} agent")
+                continue
+            
+            if user.strip().lower().startswith("/remove-agent"):
+                parts = user.strip().split()
+                if len(parts) < 2:
+                    agents_info = agent.get_managed_agents_summary()
+                    print("Usage: /remove-agent <name>")
+                    if agents_info:
+                        print("Available agents:", ", ".join([a['name'] for a in agents_info]))
+                    continue
+                
+                agent_name = parts[1]
+                if agent.remove_managed_agent(agent_name):
+                    print(f"✓ {agent_name} removed successfully")
+                else:
+                    print(f"✗ Failed to remove {agent_name}")
+                continue
+            
+            if user.strip().lower().startswith("/delegate"):
+                parts = user.strip().split()
+                if len(parts) < 3:
+                    print("Usage: /delegate <parent_agent> <child_agent>")
+                    instances = AgentFactory.all_instances().keys()
+                    print(f"Active instances: {', '.join(instances)}")
+                    continue
+                
+                parent_name = parts[1]
+                child_name = parts[2]
+                
+                parent = AgentFactory.get_instance(parent_name)
+                if not parent:
+                    print(f"✗ Parent agent '{parent_name}' not found")
+                    continue
+                
+                if parent.delegate_agent(child_name):
+                    print(f"✓ {child_name} delegated to {parent_name}")
+                else:
+                    print(f"✗ Failed to delegate {child_name} to {parent_name}")
+                continue
+
+            if user.strip().lower().startswith("/undelegate"):
+                parts = user.strip().split()
+                if len(parts) < 3:
+                    print("Usage: /undelegate <parent_agent> <child_agent>")
+                    continue
+                
+                parent_name = parts[1]
+                child_name = parts[2]
+                
+                parent = AgentFactory.get_instance(parent_name)
+                if not parent:
+                    print(f"✗ Parent agent '{parent_name}' not found")
+                    continue
+                
+                if parent.undelegate_agent(child_name):
+                    print(f"✓ {child_name} removed from {parent_name}")
+                else:
+                    print(f"✗ Failed to undelegate {child_name} from {parent_name}")
+                continue
+            
+            if user.strip().lower() == "/list-agents":
+                agents_info = agent.get_managed_agents_summary()
+                available = agent.get_available_agent_types()
+                instances = AgentFactory.all_instances().keys()
+                print(f"\nActive Agent Instances ({len(instances)}):")
+                for name in instances:
+                    print(f"  • {name}")
+                
+                print(f"\nManaged Agents of {agent.__class__.__name__} ({len(agents_info)}):")
+                if agents_info:
+                    for info in agents_info:
+                        print(f"  • {info['name']}")
+                else:
+                    print("  (none)")
+                print(f"\nAvailable Types to Create:")
+                if available:
+                    for agent_type in available:
+                        print(f"  • {agent_type}")
+                else:
+                    print("  (none)")
                 continue
             
             # Process user message

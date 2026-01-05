@@ -54,7 +54,7 @@ class DiscordSmolTool(Tool):
     }
     output_type = "string"
     
-    def __init__(self, discord_service: Any):
+    def __init__(self, discord_service: Any = None):
         super().__init__()
         self.discord = discord_service
     
