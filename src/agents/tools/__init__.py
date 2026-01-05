@@ -3,12 +3,6 @@ __all__ = []
 
 # Smolagents-compatible tools
 try:
-    from .webbrowser_smol import WebBrowserSmolTool
-    __all__.append("WebBrowserSmolTool")
-except ImportError:
-    pass
-
-try:
     from .desktop_smol import DesktopSmolTool
     __all__.append("DesktopSmolTool")
 except ImportError:
@@ -48,6 +42,12 @@ except ImportError:
 try:
     from .webbrowser import WebBrowserTool
     __all__.append("WebBrowserTool")
+except ImportError:
+    pass
+
+try:
+    from .webbrowser import WebBrowserSmolTool
+    __all__.append("WebBrowserSmolTool")
 except ImportError:
     pass
 

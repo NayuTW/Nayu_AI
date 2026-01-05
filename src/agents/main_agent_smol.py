@@ -21,7 +21,7 @@ from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
 
 # Import smolagents-compatible tools
-from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
+from src.agents.tools.webbrowser import WebBrowserSmolTool
 from src.agents.tools.desktop_smol import DesktopSmolTool
 from src.agents.tools.vision_smol import VisionSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
@@ -90,7 +90,7 @@ class MainAgentSmol:
         self.store = store
         self.session_id = session_id
         self.os_context = ""  # Will be populated when desktop tool is initialized
-        self._latest_action_steps: List[Dict[str, Any]] = []
+        self._latest_action_steps: list[dict[str, Any]] = []
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -254,7 +254,7 @@ class MainAgentSmol:
 
     def _capture_action_step(self, step: ActionStep, agent=None):
         """Store the latest ActionStep for multi-step visibility."""
-        step_dict: Dict[str, Any] = {}
+        step_dict: dict[str, Any] = {}
         try:
             if hasattr(step, "dict"):
                 step_dict = step.dict()
@@ -272,7 +272,7 @@ class MainAgentSmol:
         if observation:
             self.state.last_observation = observation
 
-    def _sanitize_steps(self, steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _sanitize_steps(self, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Ensure steps are JSON serializable for storage and events."""
         return [self._ensure_jsonable(step) for step in steps] if steps else []
 
@@ -288,7 +288,7 @@ class MainAgentSmol:
             return data
         return str(data)
 
-    def _extract_last_observation(self, steps: List[Dict[str, Any]]) -> Optional[str]:
+    def _extract_last_observation(self, steps: list[dict[str, Any]]) -> Optional[str]:
         """Extract the most recent observation or tool output from steps."""
         for step in reversed(steps or []):
             obs = step.get("observations") or step.get("action_output")
