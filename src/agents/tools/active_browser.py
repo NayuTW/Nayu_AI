@@ -1,150 +1,289 @@
-from io import BytesIO
+"""
+Active browser tools for interactive web browsing using Helium.
+Provides tools for navigating, searching, and interacting with web pages.
+"""
 from time import sleep
+from typing import Optional, Any
 
 import helium
 from dotenv import load_dotenv
-from PIL import Image
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
-from smolagents import CodeAgent, tool
-from smolagents.agents import ActionStep
+from smolagents import tool
 
 
 load_dotenv()
 
+# Global browser state
+_browser_driver: Optional[Any] = None
+_current_agent: Optional[Any] = None
+
+
+def init_browser_tools(agent: Any) -> None:
+    """
+    Initialize browser tools with a reference to the agent.
+    Should be called when VisionAgent initializes.
+    
+    Args:
+        agent: The VisionAgent instance that will use these tools
+    """
+    global _current_agent
+    _current_agent = agent
+
+
+def get_driver() -> Optional[Any]:
+    """Get the current browser driver instance."""
+    global _browser_driver
+    if _browser_driver is None:
+        try:
+            _browser_driver = helium.get_driver()
+        except:
+            pass
+    return _browser_driver
+
+
+# Chrome options
+_chrome_options = webdriver.ChromeOptions()
+_chrome_options.add_argument("--start-fullscreen")
+_chrome_options.add_argument("--force-device-scale-factor=1")
+_chrome_options.add_argument("--window-size=1920,1080")
+_chrome_options.add_argument("--disable-pdf-viewer")
+_chrome_options.add_argument("--window-position=0,0")
+
+@tool
+def start_browser() -> str:
+    """Starts the Chrome browser instance for web browsing."""
+    global _browser_driver
+    try:
+        _browser_driver = helium.start_chrome(headless=False, options=_chrome_options)
+        sleep(1.0)
+        return "Browser started successfully. Use go_to_url(url) to navigate to a website."
+    except Exception as e:
+        return f"Error starting browser: {e}"
+
+start_browser.name = "start_browser"
+start_browser.description = "Starts the Chrome browser instance for web browsing."
+
+
+@tool
+def go_to_url(url: str) -> str:
+    """Navigate to a specific URL.
+    
+    Args:
+        url: The URL to navigate to (e.g., https://github.com)
+    """
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        helium.go_to(url)
+        sleep(1.5)
+        return f"Navigated to {url}. Current URL: {driver.current_url}"
+    except Exception as e:
+        return f"Error navigating to URL: {e}"
+
+go_to_url.name = "go_to_url"
+go_to_url.description = "Navigate to a specific URL in the browser."
+
+
+@tool
+def click_element(text: str) -> str:
+    """Click on an element by its visible text.
+    
+    Args:
+        text: The visible text of the element to click
+    """
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        helium.click(text)
+        sleep(1.0)
+        return f"Clicked on element: {text}"
+    except Exception as e:
+        return f"Error clicking element: {e}"
+
+click_element.name = "click_element"
+click_element.description = "Click on an element by its visible text."
+
+
+@tool
+def click_link(text: str) -> str:
+    """Click on a link by its visible text.
+    
+    Args:
+        text: The visible text of the link to click
+    """
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        helium.click(helium.Link(text))
+        sleep(1.0)
+        return f"Clicked on link: {text}"
+    except Exception as e:
+        return f"Error clicking link: {e}"
+
+click_link.name = "click_link"
+click_link.description = "Click on a link by its visible text."
+
+
 @tool
 def search_item_ctrl_f(text: str, nth_result: int = 1) -> str:
-    """
-    Searches for text on the current page via Ctrl + F and jumps to the nth occurrence.
+    """Search for text on the current page and jump to the nth occurrence.
+    
     Args:
-        text: The text to search for
-        nth_result: Which occurrence to jump to (default: 1)
+        text: The text to search for on the page
+        nth_result: Which occurrence to jump to (1-indexed, default: 1)
     """
-    name = "search_item_ctrl_f"
-    description = "Searches for text on the current page via Ctrl + F and jumps to the nth occurrence."
-    elements = driver.find_elements(By.XPATH, f"//*[contains(text(), '{text}')]")
-    if nth_result > len(elements):
-        raise Exception(f"Match n°{nth_result} not found (only {len(elements)} matches found)")
-    result = f"Found {len(elements)} matches for '{text}'."
-    elem = elements[nth_result - 1]
-    driver.execute_script("arguments[0].scrollIntoView(true);", elem)
-    result += f"Focused on element {nth_result} of {len(elements)}"
-    return result
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        elements = driver.find_elements(By.XPATH, f"//*[contains(text(), '{text}')]")
+        if not elements:
+            return f"No matches found for '{text}'"
+        if nth_result > len(elements):
+            return f"Match #{nth_result} not found (only {len(elements)} matches found)"
+        elem = elements[nth_result - 1]
+        driver.execute_script("arguments[0].scrollIntoView(true);", elem)
+        sleep(0.5)
+        return f"Found {len(elements)} matches for '{text}'. Focused on element #{nth_result}"
+    except Exception as e:
+        return f"Error searching for text: {e}"
+
+search_item_ctrl_f.name = "search_item_ctrl_f"
+search_item_ctrl_f.description = "Searches for text on the current page and jumps to the nth occurrence."
 
 
 @tool
-def go_back() -> None:
-    """Goes back to previous page"""
-    name = "go_back"
-    description = "Goes back to previous page"
-    driver.back()
+def scroll_down(num_pixels: int = 1200) -> str:
+    """Scroll down the page by the specified number of pixels.
+    
+    Args:
+        num_pixels: Number of pixels to scroll down (default: 1200 for one viewport)
+    """
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        driver.execute_script(f"window.scrollBy(0, {num_pixels});")
+        sleep(0.5)
+        return f"Scrolled down {num_pixels} pixels"
+    except Exception as e:
+        return f"Error scrolling: {e}"
+
+scroll_down.name = "scroll_down"
+scroll_down.description = "Scroll down by specified number of pixels."
+
+
+@tool
+def scroll_up(num_pixels: int = 1200) -> str:
+    """Scroll up the page by the specified number of pixels.
+    
+    Args:
+        num_pixels: Number of pixels to scroll up (default: 1200 for one viewport)
+    """
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        driver.execute_script(f"window.scrollBy(0, -{num_pixels});")
+        sleep(0.5)
+        return f"Scrolled up {num_pixels} pixels"
+    except Exception as e:
+        return f"Error scrolling: {e}"
+
+scroll_up.name = "scroll_up"
+scroll_up.description = "Scroll up by specified number of pixels."
+
+
+@tool
+def go_back() -> str:
+    """Goes back to the previous page."""
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        driver.back()
+        sleep(1.0)
+        return "Went back to previous page"
+    except Exception as e:
+        return f"Error going back: {e}"
+
+go_back.name = "go_back"
+go_back.description = "Goes back to the previous page."
 
 
 @tool
 def close_popups() -> str:
+    """Close any visible modal or pop-up on the page using the Escape key.
+    
+    Use this tool to dismiss pop-up windows and modal dialogs.
     """
-    Closes any visible modal or pop-up on the page. Use this to dismiss pop-up windows!
-    This does not work on cookie consent banenrs
-    """
-    name = "close_popups"
-    description = "Closes any visible modal or pop-up on the page. Use this to dismiss pop-up windows!"
-    webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+        sleep(0.5)
+        return "Sent Escape key to close pop-ups"
+    except Exception as e:
+        return f"Error closing popups: {e}"
 
-
-# Chrome options
-chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument("--force-device-scale-factor=1")
-chrome_options.add_argument("--window-size=1000,1350")
-chrome_options.add_argument("--disable-pdf-viewer")
-chrome_options.add_argument("--window-position=0,0")
+close_popups.name = "close_popups"
+close_popups.description = "Closes any visible modal or pop-up on the page using Escape key."
 
 
 @tool
-def start_browser() -> None:
-    """Starts the helium browser instance."""
-    name = "start_browser"
-    description = "Starts the helium browser instance."
-    global driver
-    driver = helium.start_chrome(headless=False, options=chrome_options)
-    agent.python_executor("driver = helium.get_driver()")
+def get_current_url() -> str:
+    """Get the current URL of the browser."""
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        return f"Current URL: {driver.current_url}"
+    except Exception as e:
+        return f"Error getting URL: {e}"
+
+get_current_url.name = "get_current_url"
+get_current_url.description = "Get the current URL of the browser."
 
 
-# Screenshot callback
-def save_screenshot(memory_step: ActionStep, agent: CodeAgent) -> None:
-    sleep(1.0)
-    driver = helium.get_driver()
-    current_step = memory_step.step_number
-    if driver is not None:
-        for previous_memory_step in agent.memory.steps:
-            if isinstance(previous_memory_step, ActionStep) and previous_memory_step.step_number <= current_step - 2:
-                previous_memory_step.observations_images = None
-        png_bytes = driver.get_screenshot_as_png()
-        image = Image.open(BytesIO(png_bytes))
-        print(f"Captured a browser screenshot: {image.size} pixels")
-        memory_step.observations_images = [image.copy()]
+def init_browser_tools(agent: "CodeAgent") -> None:
+    """Initialize browser tools with a reference to the VisionAgent."""
+    global _current_agent
+    _current_agent = agent
+    # Set up Python environment with necessary imports in the agent
+    try:
+        agent.python_executor("from helium import *")
+    except Exception:
+        pass  # Agent may not have python_executor available
 
 
-    url_info = f"Current url: {driver.current_url}"
-    memory_step.observations = (
-        url_info if memory_step.observations is None else memory_step.observations + "\n" + url_info
-    )
+# Guidance for the agent on how to use browser tools
+HELIUM_INSTRUCTIONS = """
+## Interactive Web Browsing Tools Available:
 
+**To start browsing:**
+1. Call `start_browser()` to open Chrome
+2. Use `go_to_url(url)` to navigate to a website
 
-# Import helium for agent
-agent.python_executor("from helium import *")
+**To interact with pages:**
+- Use `click_element(text)` to click buttons/elements by their visible text
+- Use `click_link(text)` to click links
+- Use `search_item_ctrl_f(text)` to find text on page and jump to it
+- Use `scroll_down(num_pixels)` or `scroll_up(num_pixels)` to scroll
+- Use `close_popups()` to dismiss modal windows
+- Use `get_current_url()` to check the current page URL
+- Use `go_back()` to go back to previous page
 
-
-helium_instructions = """
-You can use helium to access websites. Don't bother about the helium driver, it's already managed.
-We've already ran "from helium import *"
-Then you can go to pages!
-Code:
-```py
-go_to('github.com/trending')
-```<end_code>
-
-You can directly click clickable elements by inputting the text that appears on them.
-Code:
-```py
-click("Top products")
-```<end_code>
-
-If it's a link:
-Code:
-```py
-click(Link("Top products"))
-```<end_code>
-
-If you try to interact with an element and it's not found, you'll get a LookupError.
-In general stop your action after each button click to see what happens on your screenshot.
-Never try to login in a page.
-
-To scroll up or down, use scroll_down or scroll_up with as an argument the number of pixels to scroll from.
-Code:
-```py
-scroll_down(num_pixels=1200) # This will scroll one viewport down
-```<end_code>
-
-When you have pop-ups with a cross icon to close, don't try to click the close icon by finding its element or targeting an 'X' element (this most often fails).
-Just use your built-in tool `close_popups` to close them:
-Code:
-```py
-close_popups()
-```<end_code>
-
-You can use .exists() to check for the existence of an element. For example:
-Code:
-```py
-if Text('Accept cookies?').exists():
-    click('I accept')
-```<end_code>
+**Important tips:**
+- The desktop screenshot at .cache/desktop.png updates automatically
+- If an action fails, check the error message and try again
+- Never try to login to pages
+- If you can't find an element, try scrolling first
+- Use search_item_ctrl_f to locate text before interacting with it
 """
-
-
-
-
-agent_output = agent.run(search_request + helium_instructions)
-print("Final output:")
-print(agent_output)

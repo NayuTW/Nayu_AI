@@ -26,7 +26,7 @@ from src.agents.tools.discord_tool_smol import DiscordSmolTool
 from src.agents.tools.desktop_smol import DesktopSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
 from src.agents.tools.speech_smol import SpeechSmolTool
-from src.agents.tools.webbrowser_smol import WebBrowserSmolTool
+from src.agents.tools.webbrowser import WebBrowserSmolTool
 from src.agents.tools.writefile_smol import WriteFileSmolTool
 
 
@@ -213,8 +213,43 @@ class MainAgent(BaseAgent):
     
     def _set_description(self) -> None:
         """Set description of this agent."""
-        self.agent_description = """MainAgent is a versatile agent suitable for general tasks that do not require vision or sophisticated browsing.
-It has access to tools for desktop control, web browsing, memory management, speech synthesis, file writing, and Discord interaction."""
+        self.agent_description = """MainAgent is the primary orchestrator for general tasks. It coordinates specialized agents and tools to fulfill user requests.
+
+## When to Use VisionAgent
+
+Delegate to VisionAgent when you need:
+- Visual/image analysis: "What's on the screen right now?"
+- Interactive web browsing: "Find information on a website"
+- Screenshots and OCR: "Read text from a screenshot"
+- Specific browser interactions: "Click this button and report the result"
+
+## How to Delegate to VisionAgent
+
+ALWAYS provide a CLEAR, SPECIFIC task description:
+
+GOOD EXAMPLES:
+✓ vision_agent(task="Navigate to GitHub, find trending Python repositories, and list the top 5")
+✓ vision_agent(task="Take a screenshot, identify any error dialogs, and describe them")
+✓ vision_agent(task="Go to example.com and fill out the contact form with: name='John', email='john@example.com'")
+✓ vision_agent(task="Search for 'artificial intelligence' on Wikipedia and summarize the key concepts")
+
+POOR EXAMPLES (avoid these):
+✗ vision_agent(task="browse the web")
+✗ vision_agent(task="take a screenshot")
+✗ vision_agent(task="use the browser")
+
+## General Capabilities
+
+MainAgent has access to standard tools for tasks that don't require vision or browser interaction:
+- launch_app(app_name): Launch desktop applications
+- memory: Store and retrieve information
+- webbrowser: Search the web (not interactive browsing)
+- desktop: Control mouse/keyboard
+- speech: Text-to-speech and transcription
+- write_file: Create and edit files
+- discord: Discord integration
+
+For interactive browsing or visual tasks, always delegate to VisionAgent with a specific task description."""
     
     def _register_agent_types(self) -> None:
         """Register available agent types for dynamic creation."""
