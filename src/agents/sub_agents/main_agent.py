@@ -643,6 +643,7 @@ Respond naturally and use tools only if needed. You can reference previous messa
         
         Returns:
             String containing concatenated final answer text, if available.
+        Note: Key priority mirrors dashboard extractFinalAnswer helper.
         """
         texts: List[str] = []
         

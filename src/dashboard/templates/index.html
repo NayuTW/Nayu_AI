@@ -259,6 +259,13 @@
 
   <script>
     const MAX_CHAT_MESSAGES = 50;
+    const pickAnswer = (item) => {
+        if (!item) return '';
+        if (typeof item === 'object') {
+            return item.final_answer || item.answer || item.output || item.content || item.text || '';
+        }
+        return String(item);
+    };
     const eventStream = document.getElementById('event-stream');
     const healthList = document.getElementById('health-list');
     const chatLog = document.getElementById('chat-log');
@@ -346,14 +353,6 @@
 
     function extractFinalAnswer(payload) {
         if (!payload) return '';
-        const pickAnswer = (item) => {
-            if (!item) return '';
-            if (typeof item === 'object') {
-                return item.final_answer || item.answer || item.output || item.content || item.text || '';
-            }
-            return String(item);
-        };
-
         const finalAnswers = payload.final_answers;
         if (Array.isArray(finalAnswers) && finalAnswers.length > 0) {
             const texts = finalAnswers.map(pickAnswer).filter(Boolean);
