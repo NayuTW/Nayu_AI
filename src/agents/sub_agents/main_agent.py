@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import os
 import time
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 from smolagents import CodeAgent, RunResult
 
@@ -647,7 +647,7 @@ Respond naturally and use tools only if needed. You can reference previous messa
         Returns:
             String containing concatenated final answer text, if available.
         """
-        texts: list[str] = []
+        texts: List[str] = []
         
         def _extract_from_item(item: Any) -> Optional[str]:
             if item is None:

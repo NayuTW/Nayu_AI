@@ -258,6 +258,7 @@
   </div>
 
   <script>
+    const MAX_CHAT_MESSAGES = 50;
     const eventStream = document.getElementById('event-stream');
     const healthList = document.getElementById('health-list');
     const chatLog = document.getElementById('chat-log');
@@ -338,7 +339,7 @@
         `;
         chatLog.appendChild(msg);
         chatLog.scrollTop = chatLog.scrollHeight;
-        while (chatLog.children.length > 50) {
+        while (chatLog.children.length > MAX_CHAT_MESSAGES) {
             chatLog.removeChild(chatLog.firstChild);
         }
     }
@@ -368,10 +369,11 @@
         if (fallback) return fallback;
 
         try {
-            return JSON.stringify(payload) || '';
+            const serialized = JSON.stringify(payload);
+            return serialized || 'Unable to display response';
         } catch (e) {
             console.warn('Failed to stringify payload', e);
-            return '';
+            return 'Unable to display response';
         }
     }
 
