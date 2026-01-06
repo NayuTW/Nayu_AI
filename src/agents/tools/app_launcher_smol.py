@@ -30,11 +30,7 @@ class AppLauncherSmolTool(Tool):
     }
     output_type = "string"
     
-<<<<<<< HEAD
-    def __init__(self, desktop_tool, vision_tool=None):
-=======
     def __init__(self, desktop_tool):
->>>>>>> main
         super().__init__()
         self.desktop = desktop_tool
 
