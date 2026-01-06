@@ -172,16 +172,6 @@ class MainAgent(BaseAgent):
             print(f"Warning: Could not initialize speech tool: {e}")
         
         try:
-            vision = VisionSmolTool(agent=self)
-            self.add_tool(vision)
-            self.registry.register("vision", vision, {
-                "name": vision.name,
-                "description": vision.description
-            })
-        except Exception as e:
-            print(f"Warning: Could not initialize vision tool: {e}")
-        
-        try:
             write_file = WriteFileSmolTool(workspace_dir=".workspace")
             self.add_tool(write_file)
             self.registry.register("write_file", write_file, {
