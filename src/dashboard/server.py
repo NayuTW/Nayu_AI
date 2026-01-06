@@ -158,6 +158,22 @@ async def toggle_speak_on_error():
     await bus.publish("settings.update", {"speak_on_error": notifier.speak_on_error})
     return await settings_partial()
 
+@app.post("/chat", response_class=HTMLResponse)
+async def send_chat(message: str = Form(...)):
+    """Send a chat message from the dashboard to the main agent."""
+    text = (message or "").strip()
+    if not text:
+        return HTMLResponse("Please enter a message.", status_code=400)
+    if agent is None:
+        return HTMLResponse("Agent not available.", status_code=503)
+    try:
+        # This will publish agent.input/agent.output events captured by the dashboard websocket
+        await agent.handle_user_message(user_text=text, source="dashboard")
+        return HTMLResponse("Message sent.")
+    except Exception as e:
+        await bus.publish("agent.error", {"error": str(e), "source": "dashboard"})
+        return HTMLResponse(f"Error sending message: {e}", status_code=500)
+
 @app.post("/settings/toggle_voice", response_class=HTMLResponse)
 async def toggle_voice():
     notifier.set_voice(not notifier.voice_enabled)
