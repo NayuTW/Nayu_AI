@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import os
 import time
-from typing import Any, Optional, List
+from typing import Any, Optional
 
 from smolagents import CodeAgent, RunResult
 
@@ -16,6 +16,7 @@ from src.agents.sub_agents.vision_agent import VisionAgent
 from src.agents.core.events import EventBus
 from src.agents.core.registry import ToolRegistry
 from src.agents.core.store import SQLiteStore
+from src.agents.core.output_handler import AgentOutputHandler
 from src.agents.llm.litellm_model import OllamaLiteLLMModel
 from src.agents.memory.session_manager import SessionManager
 from src.agents.notify.notifier import Notifier
@@ -62,6 +63,7 @@ class MainAgent(BaseAgent):
 
         # Set agent description
         self._set_description()
+        self.output_handler = AgentOutputHandler(bus)
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -409,7 +411,7 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 result = str(result)
             if not result.strip():
                 result = "I processed your request."
-            extracted_final = self._extract_final_answer_text(final_answers) if final_answers else None
+            extracted_final = self.output_handler.extract_final_answer_text(final_answers) if final_answers else None
             final_text = extracted_final or result
             
             # Add assistant response to session
@@ -424,12 +426,13 @@ Respond naturally and use tools only if needed. You can reference previous messa
             await self._persist_example(user_text, final_text, mem_digest, source, user_id, channel_id)
             
             # Publish output event
-            await self.bus.publish("agent.output", {
-                "text": final_text,
-                "latency_ms": latency_ms,
-                "session_id": active_session_id,
-                "final_answers": self._ensure_jsonable(final_answers) if final_answers else None
-            })
+            await self.output_handler.publish_output(
+                text=final_text,
+                latency_ms=latency_ms,
+                session_id=active_session_id,
+                final_answers=final_answers,
+                ensure_jsonable=self._ensure_jsonable,
+            )
             
             return final_text
             
@@ -633,48 +636,6 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 return str(obj)
         except Exception:
             return str(obj)
-    
-    def _extract_final_answer_text(self, final_answers: Any) -> Optional[str]:
-        """
-        Extract readable text from smolagents final_answers structures.
-        
-        Args:
-            final_answers: Raw final_answers object from RunResult
-        
-        Returns:
-            String containing concatenated final answer text, if available.
-        Note: Key priority mirrors dashboard extractFinalAnswer helper
-        (final_answer > answer > output > content > text) to keep frontend
-        and backend rendering consistent.
-        """
-        texts: List[str] = []
-        
-        def _extract_from_item(item: Any) -> Optional[str]:
-            if item is None:
-                return None
-            if isinstance(item, dict):
-                for key in ("final_answer", "answer", "output", "content", "text"):
-                    if key in item and item[key] is not None:
-                        return str(item[key])
-                return None
-            return str(item)
-        
-        if isinstance(final_answers, (list, tuple)):
-            for ans in final_answers:
-                val = _extract_from_item(ans)
-                if val:
-                    texts.append(val)
-        else:
-            val = _extract_from_item(final_answers)
-            if val:
-                texts.append(val)
-        
-        if not texts:
-            return None
-        
-        stripped_texts = [t.strip() for t in texts]
-        combined = "\n\n".join([t for t in stripped_texts if t])
-        return combined or None
     
     def _extract_last_observation(self, steps: list[dict[str, Any]]) -> Optional[str]:
         """
