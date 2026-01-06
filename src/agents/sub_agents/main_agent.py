@@ -409,10 +409,7 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 result = str(result)
             if not result.strip():
                 result = "I processed your request."
-            if final_answers:
-                extracted_final = self._extract_final_answer_text(final_answers)
-            else:
-                extracted_final = None
+            extracted_final = self._extract_final_answer_text(final_answers) if final_answers else None
             final_text = extracted_final or result
             
             # Add assistant response to session
@@ -672,7 +669,7 @@ Respond naturally and use tools only if needed. You can reference previous messa
         if not texts:
             return None
         
-        stripped_texts = [str(t).strip() for t in texts]
+        stripped_texts = [t.strip() for t in texts]
         combined = "\n\n".join([t for t in stripped_texts if t])
         return combined or None
     

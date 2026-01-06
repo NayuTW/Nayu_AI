@@ -367,14 +367,7 @@
 
         const fallback = pickAnswer(payload);
         if (fallback) return fallback;
-
-        try {
-            const serialized = JSON.stringify(payload);
-            return serialized || 'Unable to display response';
-        } catch (e) {
-            console.warn('Failed to stringify payload', e);
-            return 'Unable to display response';
-        }
+        return 'Unable to display response';
     }
 
     function escapeHtml(unsafe) {
