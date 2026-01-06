@@ -382,12 +382,14 @@ Respond naturally and use tools only if needed. You can reference previous messa
             if "return_full_result" in inspect.signature(self.agent.run).parameters:
                 run_kwargs["return_full_result"] = True
             run_output = await asyncio.to_thread(self.agent.run, full_prompt, **run_kwargs)
+            final_answers = None
             
             latency_ms = (time.time() - t0) * 1000
             print(f"Agent response time: {latency_ms:.0f}ms")
             result = run_output.output if isinstance(run_output, RunResult) else run_output
             
             if isinstance(run_output, RunResult):
+                final_answers = getattr(run_output, "final_answers", None)
                 action_steps = self._sanitize_steps(run_output.steps or [])
                 if action_steps:
                     self._latest_action_steps.extend(action_steps)
@@ -407,6 +409,10 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 result = str(result)
             if not result.strip():
                 result = "I processed your request."
+            if final_answers:
+                extracted_final = self._extract_final_answer_text(final_answers)
+                if extracted_final:
+                    result = extracted_final
             
             # Add assistant response to session
             self.session_manager.add_message(
@@ -423,7 +429,8 @@ Respond naturally and use tools only if needed. You can reference previous messa
             await self.bus.publish("agent.output", {
                 "text": result,
                 "latency_ms": latency_ms,
-                "session_id": active_session_id
+                "session_id": active_session_id,
+                "final_answers": self._ensure_jsonable(final_answers) if final_answers else None
             })
             
             return result
@@ -628,6 +635,44 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 return str(obj)
         except Exception:
             return str(obj)
+    
+    def _extract_final_answer_text(self, final_answers: Any) -> Optional[str]:
+        """
+        Extract readable text from smolagents final_answers structures.
+        
+        Args:
+            final_answers: Raw final_answers object from RunResult
+        
+        Returns:
+            String containing concatenated final answer text, if available.
+        """
+        texts: list[str] = []
+        
+        def _extract_from_item(item: Any) -> Optional[str]:
+            if item is None:
+                return None
+            if isinstance(item, dict):
+                for key in ("final_answer", "answer", "output", "content", "text"):
+                    if item.get(key):
+                        return str(item[key])
+                return None
+            return str(item)
+        
+        if isinstance(final_answers, (list, tuple)):
+            for ans in final_answers:
+                val = _extract_from_item(ans)
+                if val:
+                    texts.append(val)
+        else:
+            val = _extract_from_item(final_answers)
+            if val:
+                texts.append(val)
+        
+        if not texts:
+            return None
+        
+        combined = "\n\n".join([t.strip() for t in texts if str(t).strip()])
+        return combined or None
     
     def _extract_last_observation(self, steps: list[dict[str, Any]]) -> Optional[str]:
         """

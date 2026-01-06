@@ -145,6 +145,57 @@
       border-bottom: 1px solid #eee;
     }
     
+    .chat-log {
+      background: #ffffff;
+      border: 1px solid #e1e4e8;
+      border-radius: 8px;
+      padding: 12px;
+      height: 320px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .chat-message {
+      max-width: 85%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      line-height: 1.5;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    
+    .chat-user {
+      align-self: flex-end;
+      background: #e7f1ff;
+      border: 1px solid #c7dcff;
+    }
+    
+    .chat-assistant {
+      align-self: flex-start;
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+    }
+    
+    .chat-role {
+      font-size: 12px;
+      font-weight: 700;
+      color: #586069;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .chat-empty {
+      text-align: center;
+      color: #888;
+      padding: 16px;
+      width: 100%;
+    }
+    
     @media (max-width: 1024px) {
       .grid-2, .settings-grid { grid-template-columns: 1fr; }
     }
@@ -186,6 +237,13 @@
   </div>
 
   <div class="section">
+    <h2>Chat</h2>
+    <div id="chat-log" class="chat-log">
+      <div class="chat-empty">Waiting for messages...</div>
+    </div>
+  </div>
+
+  <div class="section">
     <h2>Live Event Stream</h2>
     <div id="event-stream" class="event-list">
       <div class="event-item" style="color: #888;">Connecting to event stream...</div>
@@ -202,6 +260,7 @@
   <script>
     const eventStream = document.getElementById('event-stream');
     const healthList = document.getElementById('health-list');
+    const chatLog = document.getElementById('chat-log');
     
     const ws = new WebSocket(`ws://${location.host}/ws`);
     
@@ -213,7 +272,10 @@
             const payload = msg.payload || {};
             eventStream.innerHTML = '';
             if (payload.events) {
-                payload.events.forEach(ev => appendEvent(ev.type, ev.payload, ev.ts));
+                payload.events.forEach(ev => {
+                    appendEvent(ev.type, ev.payload, ev.ts);
+                    handleChatEvent(ev.type, ev.payload);
+                });
             }
             return;
         }
@@ -236,6 +298,7 @@
             return;
         }
         
+        handleChatEvent(msg.type, msg.payload);
         // Append to event stream
         appendEvent(msg.type, msg.payload, msg.ts);
 
@@ -250,6 +313,68 @@
             htmx.ajax('GET', '/examples', {target:'#examples-container', swap:'innerHTML'});
         }
     };
+
+    function handleChatEvent(type, payload) {
+        if (!chatLog) return;
+        if (type === 'agent.input') {
+            appendChatMessage('user', payload?.text || '');
+        } else if (type === 'agent.output') {
+            const answer = extractFinalAnswer(payload);
+            appendChatMessage('assistant', answer);
+        }
+    }
+
+    function appendChatMessage(role, text) {
+        if (!chatLog) return;
+        const safeText = text ? escapeHtml(String(text)) : '';
+        if (chatLog.querySelector('.chat-empty')) {
+            chatLog.innerHTML = '';
+        }
+        const msg = document.createElement('div');
+        msg.className = `chat-message chat-${role}`;
+        msg.innerHTML = `
+            <div class="chat-role">${role === 'user' ? 'User' : 'Assistant'}</div>
+            <div class="chat-text">${safeText}</div>
+        `;
+        chatLog.appendChild(msg);
+        chatLog.scrollTop = chatLog.scrollHeight;
+        while (chatLog.children.length > 50) {
+            chatLog.removeChild(chatLog.firstChild);
+        }
+    }
+
+    function extractFinalAnswer(payload) {
+        if (!payload) return '';
+        const finalAnswers = payload.final_answers;
+        if (Array.isArray(finalAnswers) && finalAnswers.length > 0) {
+            const texts = finalAnswers.map(item => {
+                if (item && typeof item === 'object') {
+                    return item.final_answer || item.answer || item.output || item.content || item.text || '';
+                }
+                return item ? String(item) : '';
+            }).filter(Boolean);
+            if (texts.length) {
+                return texts.join("\\n\\n");
+            }
+        }
+        if (payload.text) return payload.text;
+        if (payload.output) return payload.output;
+        if (typeof payload === 'string') return payload;
+        try {
+            return JSON.stringify(payload);
+        } catch (_e) {
+            return '';
+        }
+    }
+
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
 
     function appendEvent(type, payload, ts) {
         const timestamp = ts ? new Date(ts * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
