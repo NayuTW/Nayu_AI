@@ -1,11 +1,10 @@
 """
 Desktop screenshot capture module with clean OOP design.
-Provides abstracted screenshot capture with periodic capture capability.
+Provides periodic desktop screenshot capture with atomic file writes.
 """
 import time
 import os
 import threading
-from abc import ABC, abstractmethod
 from typing import Optional, Callable
 
 try:
@@ -21,59 +20,34 @@ class ScreenshotCaptureError(Exception):
     pass
 
 
-class ScreenshotBackend(ABC):
-    """Abstract base class for screenshot capture backends."""
-    
-    @abstractmethod
-    def capture(self, output_path: str) -> None:
-        """Capture a screenshot and save to the given path."""
-        pass
-
-
-class MSSScreenshotBackend(ScreenshotBackend):
-    """Screenshot backend using MSS library."""
-    
-    def __init__(self):
-        """Initialize the MSS backend."""
-        if not SCREENSHOT_AVAILABLE:
-            raise ScreenshotCaptureError(
-                "MSS/PIL not available. Install with: pip install mss Pillow"
-            )
-    
-    def capture(self, output_path: str) -> None:
-        """Capture screenshot using MSS and save to output_path."""
-        try:
-            with mss.mss() as sct:
-                shot = sct.grab(sct.monitors[1])
-                img = Image.frombytes("RGB", shot.size, shot.rgb)
-            img.save(output_path)
-        except Exception as e:
-            raise ScreenshotCaptureError(f"Failed to capture screenshot: {e}")
-
-
 class DesktopCurrentCapture:
-    """Handle periodic desktop screenshot capture with clean abstraction."""
+    """Handle periodic desktop screenshot capture to a single desktop.png file."""
+    
+    SCREENSHOT_FILENAME = "desktop.png"
     
     def __init__(
         self,
         interval: float = 2.0,
         output_dir: str = ".cache",
-        backend: Optional[ScreenshotBackend] = None,
         error_callback: Optional[Callable[[str], None]] = None,
     ):
         """
         Initialize capture handler.
         
         Args:
-            interval: Capture interval in seconds
-            output_dir: Directory to save screenshots
-            backend: Screenshot backend (defaults to MSSScreenshotBackend)
+            interval: Capture interval in seconds (default 2.0)
+            output_dir: Directory to save screenshots (default .cache)
             error_callback: Optional callback for error reporting
         """
+        if not SCREENSHOT_AVAILABLE:
+            raise ScreenshotCaptureError(
+                "MSS/PIL not available. Install with: pip install mss Pillow"
+            )
+        
         self.interval = interval
         self.output_dir = output_dir
-        self._backend = backend or MSSScreenshotBackend()
         self._error_callback = error_callback
+        self._output_path = os.path.join(output_dir, self.SCREENSHOT_FILENAME)
         
         # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
@@ -83,18 +57,11 @@ class DesktopCurrentCapture:
         self._stop_event = threading.Event()
         self._state_lock = threading.Lock()
         self._is_running = False
-        
-        # Track last screenshot
-        self.last_screenshot_path: Optional[str] = None
     
-    def _generate_screenshot_path(self) -> str:
-        """Generate a unique screenshot file path."""
-        timestamp = int(time.time() * 1000)
-        return os.path.join(self.output_dir, f"screenshot_{timestamp}.png")
-    
-    def _perform_capture(self) -> str:
+    def _capture_screenshot(self) -> str:
         """
-        Perform a single screenshot capture.
+        Capture a screenshot and save to the persistent desktop.png file.
+        Uses atomic writes to prevent partial/corrupted files.
         
         Returns:
             Path to the captured screenshot
@@ -102,16 +69,25 @@ class DesktopCurrentCapture:
         Raises:
             ScreenshotCaptureError: If capture fails
         """
-        path = self._generate_screenshot_path()
-        self._backend.capture(path)
-        self.last_screenshot_path = path
-        return path
+        try:
+            with mss.mss() as sct:
+                shot = sct.grab(sct.monitors[1])
+                img = Image.frombytes("RGB", shot.size, shot.rgb)
+            
+            # Atomic write: save to temp file, then replace
+            tmp_path = f"{self._output_path}.tmp"
+            img.save(tmp_path)
+            os.replace(tmp_path, self._output_path)
+            
+            return self._output_path
+        except Exception as e:
+            raise ScreenshotCaptureError(f"Failed to capture screenshot: {e}")
     
     def _capture_loop(self) -> None:
         """Background loop for periodic screenshot capture."""
         while not self._stop_event.is_set():
             try:
-                self._perform_capture()
+                self._capture_screenshot()
             except ScreenshotCaptureError as e:
                 if self._error_callback:
                     self._error_callback(str(e))
@@ -164,13 +140,13 @@ class DesktopCurrentCapture:
     
     def capture_now(self) -> str:
         """
-        Capture a single screenshot immediately.
+        Capture a single screenshot immediately and update desktop.png.
         
         Returns:
             Path to the captured screenshot or error message
         """
         try:
-            return self._perform_capture()
+            return self._capture_screenshot()
         except ScreenshotCaptureError as e:
             if self._error_callback:
                 self._error_callback(str(e))
@@ -180,3 +156,7 @@ class DesktopCurrentCapture:
         """Check if periodic capture is active."""
         with self._state_lock:
             return self._is_running
+    
+    def get_screenshot_path(self) -> str:
+        """Get the path to the current desktop.png screenshot."""
+        return self._output_path
