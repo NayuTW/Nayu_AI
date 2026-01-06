@@ -354,7 +354,7 @@
                 return item ? String(item) : '';
             }).filter(Boolean);
             if (texts.length) {
-                return texts.join("\\n\\n");
+                return texts.join("\n\n");
             }
         }
         if (payload.text) return payload.text;
