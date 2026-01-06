@@ -40,20 +40,21 @@ CRITICAL RULES:
 4. If a task requires vision analysis (describing images, screenshots, OCR), you MUST delegate it to the `vision_agent`.
 
 TOOLS & AGENTS:
-- vision_agent: Specialized in image analysis. Call it when you need to "see" or "describe" something.
-    - Example: `vision_agent(task="Describe the image at .cache/screenshot.png")`
+- vision_agent: Specialized in image analysis. Use when you need to "see" or "describe" something on the screen.
+    - Example: `vision_agent(task="Describe what is currently displayed on the desktop screenshot")`
+    - The agent will automatically use .cache/desktop.png which is kept up-to-date by the system.
 - launch_app(app_name): Launch desktop apps.
 - memory: Store and retrieve long-term information.
 - webbrowser: Search and browse the web.
-- desktop: Control mouse/keyboard and take screenshots.
-    - `desktop(action='screenshot')` returns the path to the saved image.
+- desktop: Control mouse/keyboard (no screenshot action - use vision_agent instead).
 - speech: Text-to-speech and transcription.
 - write_file: Create and edit files.
 
-VISION WORKFLOW:
+DESKTOP SCREENSHOT WORKFLOW:
+The desktop is continuously monitored and saved to .cache/desktop.png, which updates every 2 seconds automatically.
 If the user asks about something on their screen:
-1. Use `desktop(action='screenshot')` to capture the screen.
-2. Call `vision_agent(task="Describe what is in this image: <path>")` using the path from step 1.
+1. Call `vision_agent(task="Describe the current desktop state")` 
+2. The vision_agent will analyze .cache/desktop.png automatically.
 3. Use the observation from vision_agent to formulate your next thought or final answer.
 
 Make sure to include code with the correct pattern:

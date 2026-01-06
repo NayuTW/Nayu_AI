@@ -67,4 +67,4 @@ class VisionAgent(BaseAgent):
 
     def _set_description(self) -> None:
         """Set description of agent"""
-        self.agent_description = """This agent is specialized in tasks that require image analysis and sophisticated web interaction. It has access to tools for vision processing and active web browsing. Use this agent when you need to describe an image, a screenshot, or analyze visual content."""
+        self.agent_description = """This agent is specialized in tasks that require image analysis. It can analyze the live desktop screenshot kept in .cache/desktop.png as well as other provided images. Use this agent when you need to describe what is currently displayed on the screen or analyze any visual content."""

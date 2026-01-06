@@ -20,7 +20,7 @@ class AppLauncherSmolTool(Tool):
     description = (
         "Launch a desktop application by name. "
         "Example usage: launch_app(app_name='chromium') - just provide the app name. "
-        "Returns: success status and screenshot path for verification."
+        "Returns: success status. You can use vision_agent to verify the application opened."
     )
     inputs = {
         "app_name": {
@@ -30,11 +30,7 @@ class AppLauncherSmolTool(Tool):
     }
     output_type = "string"
     
-<<<<<<< HEAD
-    def __init__(self, desktop_tool, vision_tool=None):
-=======
     def __init__(self, desktop_tool):
->>>>>>> main
         super().__init__()
         self.desktop = desktop_tool
 
@@ -148,13 +144,9 @@ class AppLauncherSmolTool(Tool):
             # small delay to allow window to appear
             time.sleep(0.5)
 
-            # Take screenshot for verification
-            screenshot_path = self.desktop.forward(action="screenshot")
-
             return (
-                f"Launched {app_name}. "
-                f"Screenshot saved to: {screenshot_path}. "
-                f"Use vision tool to verify the application opened successfully."
+                f"Launched {app_name} successfully. "
+                f"You can use vision_agent to verify the application opened correctly."
             )
         except Exception as e:
             import traceback

@@ -317,6 +317,12 @@ async def main():
             await asyncio.sleep(0.1)
     
     finally:
+        # Best-effort shutdown cleanup
+        try:
+            agent.shutdown()
+        except Exception:
+            pass
+
         # Cancel periodic flush task
         if 'flush_task' in locals():
             flush_task.cancel()
