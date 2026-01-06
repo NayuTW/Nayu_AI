@@ -1,6 +1,6 @@
 """
 DesktopTool converted to smolagents Tool class.
-Controls keyboard, mouse, and takes screenshots.
+Controls keyboard and mouse.
 """
 import time
 import os
@@ -120,7 +120,7 @@ class DesktopSmolTool(Tool):
     inputs = {
         "action": {
             "type": "string",
-            "description": "Action: screenshot, current_screenshot, start_auto_capture, stop_auto_capture, click, move, type, press, hotkey, or wait"
+            "description": "Action: click, move, type, press, hotkey, or wait"
         },
         "x": {
             "type": "number",
