@@ -20,7 +20,7 @@ class AppLauncherSmolTool(Tool):
     description = (
         "Launch a desktop application by name. "
         "Example usage: launch_app(app_name='chromium') - just provide the app name. "
-        "Returns: success status. Use vision_agent to verify the application opened."
+        "Returns: success status. You can use vision_agent to verify the application opened."
     )
     inputs = {
         "app_name": {
