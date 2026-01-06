@@ -369,7 +369,8 @@
 
         try {
             return JSON.stringify(payload) || '';
-        } catch (_e) {
+        } catch (e) {
+            console.warn('Failed to stringify payload', e);
             return '';
         }
     }
