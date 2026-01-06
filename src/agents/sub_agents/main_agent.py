@@ -411,29 +411,30 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 result = "I processed your request."
             if final_answers:
                 extracted_final = self._extract_final_answer_text(final_answers)
-                if extracted_final:
-                    result = extracted_final
+            else:
+                extracted_final = None
+            final_text = extracted_final or result
             
             # Add assistant response to session
             self.session_manager.add_message(
                 session_id=active_session_id,
                 role="assistant",
-                content=result,
+                content=final_text,
                 metadata={"latency_ms": latency_ms}
             )
             
             # Persist the interaction for fine-tuning
-            await self._persist_example(user_text, result, mem_digest, source, user_id, channel_id)
+            await self._persist_example(user_text, final_text, mem_digest, source, user_id, channel_id)
             
             # Publish output event
             await self.bus.publish("agent.output", {
-                "text": result,
+                "text": final_text,
                 "latency_ms": latency_ms,
                 "session_id": active_session_id,
                 "final_answers": self._ensure_jsonable(final_answers) if final_answers else None
             })
             
-            return result
+            return final_text
             
         except Exception as e:
             error_msg = f"Error processing request: {str(e)}"

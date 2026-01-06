@@ -345,23 +345,30 @@
 
     function extractFinalAnswer(payload) {
         if (!payload) return '';
+        const pickAnswer = (item) => {
+            if (!item) return '';
+            if (typeof item === 'object') {
+                return item.final_answer || item.answer || item.output || item.content || item.text || '';
+            }
+            return String(item);
+        };
+
         const finalAnswers = payload.final_answers;
         if (Array.isArray(finalAnswers) && finalAnswers.length > 0) {
-            const texts = finalAnswers.map(item => {
-                if (item && typeof item === 'object') {
-                    return item.final_answer || item.answer || item.output || item.content || item.text || '';
-                }
-                return item ? String(item) : '';
-            }).filter(Boolean);
+            const texts = finalAnswers.map(pickAnswer).filter(Boolean);
             if (texts.length) {
                 return texts.join("\n\n");
             }
+        } else if (finalAnswers) {
+            const single = pickAnswer(finalAnswers);
+            if (single) return single;
         }
-        if (payload.text) return payload.text;
-        if (payload.output) return payload.output;
-        if (typeof payload === 'string') return payload;
+
+        const fallback = pickAnswer(payload);
+        if (fallback) return fallback;
+
         try {
-            return JSON.stringify(payload);
+            return JSON.stringify(payload) || '';
         } catch (_e) {
             return '';
         }
