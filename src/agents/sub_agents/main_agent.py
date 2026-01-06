@@ -21,6 +21,7 @@ from src.agents.memory.session_manager import SessionManager
 from src.agents.notify.notifier import Notifier
 from src.agents.state import SharedState
 from src.agents.tools.app_launcher_smol import AppLauncherSmolTool
+from src.agents.tools.desktop_current import DesktopCurrentCapture
 from src.agents.tools.discord_tool_smol import DiscordSmolTool
 from src.agents.tools.desktop_smol import DesktopSmolTool
 from src.agents.tools.memory_smol import MemorySmolTool
@@ -88,6 +89,15 @@ class MainAgent(BaseAgent):
 
         # Initialize CodeAgent with current tools
         self._rebuild_code_agent()
+        
+        # Initialize desktop screenshot capture
+        self.desktop_capture = DesktopCurrentCapture(
+            interval=2.0,
+            output_dir=".cache",
+            error_callback=self._handle_capture_error
+        )
+        self.desktop_capture.start()
+        print("Desktop screenshot capture started (2-second interval)")
         
         # Register callback for ActionStep tracking
         self._register_action_step_callback()
@@ -162,16 +172,6 @@ class MainAgent(BaseAgent):
             print(f"Warning: Could not initialize speech tool: {e}")
         
         try:
-            vision = VisionSmolTool(agent=self)
-            self.add_tool(vision)
-            self.registry.register("vision", vision, {
-                "name": vision.name,
-                "description": vision.description
-            })
-        except Exception as e:
-            print(f"Warning: Could not initialize vision tool: {e}")
-        
-        try:
             write_file = WriteFileSmolTool(workspace_dir=".workspace")
             self.add_tool(write_file)
             self.registry.register("write_file", write_file, {
@@ -205,6 +205,11 @@ class MainAgent(BaseAgent):
             self._register_managed_agent(vision)  # One-liner with full setup
         except Exception as e:
             print(f"Warning: Could not initialize managed agents: {e}")
+    
+    def _handle_capture_error(self, error_message: str) -> None:
+        """Handle desktop capture errors."""
+        print(f"Desktop capture error: {error_message}")
+        self.bus.emit("desktop_capture.error", {"error": error_message})
     
     def _set_description(self) -> None:
         """Set description of this agent."""
@@ -254,7 +259,7 @@ It has access to tools for desktop control, web browsing, memory management, spe
             print(f"Warning: Could not register ActionStep callback: {e}")
     
     def _capture_action_step(self, step: Any, agent: Optional[Any] = None) -> None:
-        """Store the latest ActionStep for multi-step visibility."""
+        """Store the latest ActionStep and capture desktop screenshot."""
         step_dict: dict[str, Any] = {}
         try:
             if hasattr(step, "dict"):
@@ -272,6 +277,12 @@ It has access to tools for desktop control, web browsing, memory management, spe
         
         sanitized = self._ensure_jsonable(step_dict)
         self.add_action_step(sanitized)
+        
+        # Capture desktop screenshot instantly when a tool is used
+        try:
+            self.desktop_capture.capture_now()
+        except Exception as e:
+            self._handle_capture_error(str(e))
         
         observation = self._extract_last_observation([sanitized])
         if observation:
@@ -853,6 +864,11 @@ Respond naturally and use tools only if needed. You can reference previous messa
         print("Shutting down MainAgent...")
         
         try:
+            # Stop desktop screenshot capture
+            if hasattr(self, 'desktop_capture'):
+                self.desktop_capture.stop()
+                print("Desktop screenshot capture stopped")
+            
             # Persist final state
             self.session_manager.summarize_session(self.session_id)
             

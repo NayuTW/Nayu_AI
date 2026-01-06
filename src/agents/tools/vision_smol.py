@@ -13,18 +13,19 @@ from PIL import Image
 
 class VisionSmolTool(Tool):
     """
-    Describe images or extract text from them using a Vision Language Model.
+    Analyze images or read text from them using a Vision Language Model.
     """
     name = "vision"
     description = (
-        "Analyze an image (e.g., a screenshot) or read text from it. "
-        "Provide the full path to the image file. "
-        "Optionally provide a custom prompt for specific analysis tasks."
+        "Analyze an image or read text from it. "
+        "Common usage: Provide the path to .cache/desktop.png to analyze the current desktop state. "
+        "Optionally provide a custom prompt for specific analysis tasks. "
+        "Input the full path to the image file."
     )
     inputs = {
         "path": {
             "type": "string",
-            "description": "Full path to the image file (e.g., '.cache/screenshot_1234567890.png')"
+            "description": "Full path to the image file (e.g., '.cache/desktop.png')"
         },
         "prompt": {
             "type": "string",

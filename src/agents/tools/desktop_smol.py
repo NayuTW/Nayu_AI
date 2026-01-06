@@ -1,6 +1,6 @@
 """
 DesktopTool converted to smolagents Tool class.
-Controls keyboard, mouse, and takes screenshots.
+Controls keyboard and mouse.
 """
 import time
 import os
@@ -95,35 +95,32 @@ def get_os_info() -> dict:
 
 class DesktopSmolTool(Tool):
     """
-    Control keyboard and mouse, take screenshots.
+    Control keyboard and mouse.
     
     IMPORTANT: Desktop actions take time to complete. Always use proper delays:
     - After opening launcher: wait 0.5-1.0s before typing
     - After typing app name: wait 0.3-0.5s before pressing enter
     - After launching app: wait 2-3s for app to start
-    - Use screenshot action to verify the current state before proceeding
     """
     name = "desktop"
     
     # Generate OS-aware description at class definition time.
     _os_info = get_os_info()
     description = (
-        "Control desktop via keyboard/mouse or take screenshots. "
-        "Actions: 'screenshot' (returns the file path to the saved screenshot in .cache/), "
-        "'click' (x, y coordinates), 'move' (x, y coordinates), "
+        "Control desktop via keyboard/mouse. "
+        "Actions: 'click' (x, y coordinates), 'move' (x, y coordinates), "
         "'type' (text string - for typing text only), "
         "'press' (key - for single keys like 'enter', 'tab', 'space'), "
         "'hotkey' (keys list like ['ctrl', 'c'] - for key combinations), "
         "'wait' (seconds - pause execution to let UI catch up). "
         "CRITICAL: Use 'press' for special keys (enter, tab, escape), NOT 'type'. "
         "CRITICAL: Always wait 0.5-1s after hotkeys before typing. "
-        "CRITICAL: Always wait 0.3-0.5s after typing before pressing enter. "
-        "CRITICAL: Take a screenshot to verify success before proceeding to next step."
+        "CRITICAL: Always wait 0.3-0.5s after typing before pressing enter."
     )
     inputs = {
         "action": {
             "type": "string",
-            "description": "Action: screenshot, click, move, type, press, hotkey, or wait"
+            "description": "Action: click, move, type, press, hotkey, or wait"
         },
         "x": {
             "type": "number",
@@ -167,19 +164,8 @@ class DesktopSmolTool(Tool):
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.1  # Small default pause between pyautogui actions
         os.makedirs(".cache", exist_ok=True)
-        self.last_screenshot_path = None
         self.os_info = get_os_info()
-    
-    def screenshot(self) -> str:
-        """Take a screenshot and return the file path."""
-        with mss.mss() as sct:
-            shot = sct.grab(sct.monitors[1])
-            img = Image.frombytes("RGB", shot.size, shot.rgb)
-            path = f".cache/screenshot_{int(time.time())}.png"
-            img.save(path)
-            self.last_screenshot_path = path
-            return path
-    
+
     def forward(
         self,
         action: str,
@@ -191,12 +177,7 @@ class DesktopSmolTool(Tool):
         seconds: Optional[float] = None
     ) -> str:
         """Execute desktop action and return result description."""
-        if action == "screenshot":
-            path = self.screenshot()
-            # Return just the path so it can be easily used by other tools like vision
-            return path
-        
-        elif action == "move":
+        if action == "move":
             if x is None or y is None:
                 return "Error: x and y coordinates required for move action"
             pyautogui.moveTo(x, y, duration=0.2)
@@ -246,5 +227,5 @@ class DesktopSmolTool(Tool):
         else:
             return (
                 f"Error: Unknown action '{action}'. "
-                "Valid actions: screenshot, move, click, type, press, hotkey, wait"
+                "Valid actions: move, click, type, press, hotkey, wait"
             )

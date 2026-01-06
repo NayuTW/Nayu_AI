@@ -88,7 +88,12 @@ virsh net-dhcp-leases default
   - qwen2:7b-instruct-q5_K_M (good tool calling), or llama3.1:8b-instruct-q4_K_M
   - Set num_ctx ~8–12k for 12GB VRAM comfort
 - Vision:
-  - gemma3:4b-it-q4_K_M via Ollama (default), or other Ollama vision models
+  - **ImageRAG**: Fast CLIP-based image embeddings + OCR for efficient screenshot search (new!)
+    - OpenCLIP ViT-B/32 for image-text similarity without VLM inference
+    - Tile-based indexing (3x3 grid) for fine-grained region analysis
+    - RapidOCR for local text extraction
+    - ChromaDB for vector storage and retrieval
+  - **VLM**: gemma3:4b-it-q4_K_M via Ollama (fallback for complex analysis)
 - Embeddings (CPU‑friendly):
   - intfloat/e5-small-v2 or BAAI/bge-small-en-v1.5 or all-MiniLM-L6-v2
 - Speech:
@@ -101,7 +106,9 @@ virsh net-dhcp-leases default
 - Sub‑agents (smolagents-compatible tools):
   - Web: Playwright‑based browser automation and Selenium fallback
   - Desktop: keyboard/mouse control + screenshots with OS-aware shortcuts
-  - Vision: Ollama VLM for image analysis and OCR
+  - Vision: 
+    - **ImageRAG** tools for fast image search (image_index, image_search, image_compare, image_find_ui)
+    - Traditional VLM tool for detailed analysis (vision)
   - Speech: local STT with faster-whisper and TTS with NeuTTS-Air voice cloning
   - Memory: Chroma vector store with local embeddings (fastembed/sentence-transformers)
   - WriteFile: Safe file writing to .workspace directory with guardrails
@@ -180,6 +187,62 @@ The agent can integrate with Discord to read and respond to messages in guilds (
 - Uses the same AI pipeline as CLI interactions
 - Supports DMs and guild channel messages
 - Provides programmatic send methods (`send_dm`, `send_channel_message`)
+
+## Vision System
+
+The agent has two complementary vision systems for different use cases:
+
+### ImageRAG (Fast, Embedding-based)
+
+ImageRAG provides fast image understanding using CLIP embeddings and OCR, without requiring VLM inference:
+
+**Tools:**
+- `image_index(image_path, action_id=None)`: Index a screenshot with embeddings and OCR
+- `image_search(question, image_id=None, k=6)`: Search indexed images using natural language
+- `image_compare(image_a, image_b)`: Find text differences between two images
+- `image_find_ui(query, k=5)`: Find UI elements from a prototype library
+
+**How it works:**
+1. Images are split into a 3x3 grid of tiles
+2. Each tile is embedded using OpenCLIP (ViT-B/32)
+3. OCR text is extracted with RapidOCR
+4. Everything is stored in ChromaDB for fast retrieval
+5. Natural language queries retrieve relevant regions instantly
+
+**Benefits:**
+- 10-100x faster than VLM for simple queries
+- No GPU memory overhead (CLIP stays resident)
+- Perfect for desktop automation and UI element tracking
+- Can search across all indexed screenshots
+
+**Example workflow:**
+```python
+# Index a screenshot
+image_index("/path/to/screenshot.png", action_id="after_click")
+
+# Search for specific content
+image_search("find the submit button")
+
+# Compare before/after states
+image_compare("before.png", "after.png")
+```
+
+### VLM (Detailed, LLM-based)
+
+Traditional VLM tool using Ollama for complex visual reasoning:
+
+**Tool:**
+- `vision(path, prompt=None)`: Analyze image with VLM (gemma3:4b-it-q4_K_M)
+
+**Use when:**
+- ImageRAG confidence is low
+- Complex reasoning is needed
+- Detailed image descriptions are required
+
+**Best practices:**
+- Use ImageRAG first for speed
+- Escalate to VLM only when needed
+- Keep the main agent's context window free
 
 ## Env vars
 
