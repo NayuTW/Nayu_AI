@@ -654,7 +654,7 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 return None
             if isinstance(item, dict):
                 for key in ("final_answer", "answer", "output", "content", "text"):
-                    if item.get(key):
+                    if key in item and item[key] is not None:
                         return str(item[key])
                 return None
             return str(item)
