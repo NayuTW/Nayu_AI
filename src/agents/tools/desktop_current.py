@@ -76,7 +76,7 @@ class DesktopCurrentCapture:
             
             # Atomic write: save to temp file, then replace
             tmp_path = f"{self._output_path}.tmp"
-            img.save(tmp_path)
+            img.save(tmp_path, format='PNG')
             os.replace(tmp_path, self._output_path)
             
             return self._output_path
