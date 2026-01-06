@@ -643,7 +643,9 @@ Respond naturally and use tools only if needed. You can reference previous messa
         
         Returns:
             String containing concatenated final answer text, if available.
-        Note: Key priority mirrors dashboard extractFinalAnswer helper.
+        Note: Key priority mirrors dashboard extractFinalAnswer helper
+        (final_answer > answer > output > content > text) to keep frontend
+        and backend rendering consistent.
         """
         texts: List[str] = []
         

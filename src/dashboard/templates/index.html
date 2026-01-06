@@ -259,7 +259,7 @@
 
   <script>
     const MAX_CHAT_MESSAGES = 50;
-    const pickAnswer = (item) => {
+    const extractAnswerText = (item) => {
         if (!item) return '';
         if (typeof item === 'object') {
             return item.final_answer || item.answer || item.output || item.content || item.text || '';
@@ -355,16 +355,16 @@
         if (!payload) return '';
         const finalAnswers = payload.final_answers;
         if (Array.isArray(finalAnswers) && finalAnswers.length > 0) {
-            const texts = finalAnswers.map(pickAnswer).filter(Boolean);
+            const texts = finalAnswers.map(extractAnswerText).filter(Boolean);
             if (texts.length) {
                 return texts.join("\n\n");
             }
         } else if (finalAnswers) {
-            const single = pickAnswer(finalAnswers);
+            const single = extractAnswerText(finalAnswers);
             if (single) return single;
         }
 
-        const fallback = pickAnswer(payload);
+        const fallback = extractAnswerText(payload);
         if (fallback) return fallback;
         return 'Unable to display response';
     }
