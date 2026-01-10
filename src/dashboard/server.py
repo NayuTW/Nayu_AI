@@ -361,12 +361,19 @@ async def remove_agent(agent_name: str):
 async def get_agent_instances():
     """Get list of all active agent instances."""
     try:
-        instances = list(AgentFactory.all_instances().keys())
-    except Exception:
-        instances = []
-    options = ['<option value="">MainAgent (default)</option>']
-    options.extend([f'<option value="{name}">{name}</option>' for name in instances])
-    return HTMLResponse("".join(options))
+        instances = AgentFactory.all_instances()
+        if not instances:
+            # If no instances yet, return just the default option
+            return HTMLResponse('<option value="">MainAgent (default)</option>')
+        
+        options = ['<option value="">MainAgent (default)</option>']
+        for name in instances.keys():
+            options.append(f'<option value="{name}">{name}</option>')
+        return HTMLResponse("".join(options))
+    except Exception as e:
+        # Log the error and return a minimal response
+        print(f"Error getting agent instances: {e}")
+        return HTMLResponse('<option value="">MainAgent (default)</option>')
 
 @app.post("/api/agents/delegate")
 async def delegate_agent(request: Request):
