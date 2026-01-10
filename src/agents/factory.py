@@ -17,6 +17,7 @@ class AgentFactory:
     
     _registry: Dict[str, type] = {}
     _instances: Dict[str, Any] = {}
+    _default_aliases = {"main", "mainagent", "main_agent"}
     
     @classmethod
     def register(cls, agent_type: str, agent_class: type) -> None:
@@ -71,7 +72,7 @@ class AgentFactory:
             if ident in candidates:
                 return instance
 
-        if default and ident in ("main", "mainagent", "main_agent"):
+        if default and ident in cls._default_aliases:
             return default
 
         return None

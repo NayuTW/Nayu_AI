@@ -173,13 +173,17 @@ async def send_chat(message: str = Form(...), agent_name: str = Form(None)):
             return HTMLResponse(f"Agent '{agent_name}' not found.", status_code=400)
         target_agent = agent
     try:
+        display_name = next(
+            (name for name, inst in AgentFactory.all_instances().items() if inst is target_agent),
+            target_agent.__class__.__name__,
+        )
         await dispatch_to_agent(
             target_agent,
             text,
             source="dashboard",
-            external_metadata={"target_agent": agent_name or "MainAgent"},
+            external_metadata={"target_agent": agent_name or display_name},
         )
-        return HTMLResponse(f"Message sent to {target_agent.__class__.__name__}.")
+        return HTMLResponse(f"Message sent to {display_name}.")
     except Exception as e:
         await bus.publish("agent.error", {"error": str(e), "source": "dashboard"})
         return HTMLResponse(f"Error sending message: {e}", status_code=500)
