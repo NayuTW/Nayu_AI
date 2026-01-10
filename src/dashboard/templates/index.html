@@ -104,7 +104,6 @@
       border-radius: 4px;
       font-family: 'Consolas', 'Monaco', monospace;
       font-size: 12px;
-      height: 300px;
       overflow-y: auto;
       border: 1px solid #333;
     }
@@ -150,11 +149,11 @@
       border: 1px solid #e1e4e8;
       border-radius: 8px;
       padding: 12px;
-      height: 320px;
       overflow-y: auto;
       display: flex;
-      flex-direction: column;
+      flex-direction: column !important;
       gap: 8px;
+      flex: 1;
     }
     
     .chat-message {
@@ -200,18 +199,19 @@
       display: flex;
       gap: 8px;
       margin-bottom: 12px;
-      align-items: flex-start;
+      flex-direction: column;
       flex-wrap: wrap;
     }
     
     .chat-form textarea {
       flex: 1 1 100%;
+      flex-direction: column-reverse;
       min-height: 90px;
       padding: 10px;
       border: 1px solid #d0d7de;
       border-radius: 6px;
       font-size: 14px;
-      resize: vertical;
+      resize: horizontal;
       font-family: inherit;
     }
     
@@ -226,8 +226,51 @@
       color: #586069;
     }
     
+    .chat-event-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-height: 75vh;
+    }
+    
+    .chat-event-container .section {
+      display: flex;
+      flex-direction: column;
+      max-height: 75vh;
+      resize: vertical;
+      overflow: hidden;
+    }
+    
+    .chat-event-container .section h2 {
+      flex-shrink: 0;
+    }
+    
+    .chat-event-container .section > div:not(h2) {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    .chat-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+    }
+    
+    .event-list {
+      height: 100%;
+    }
+    
+    .chat-log {
+      flex-direction: column-reverse;
+      height: 100%;
+    }
+
     @media (max-width: 1024px) {
       .grid-2, .settings-grid { grid-template-columns: 1fr; }
+      .chat-event-container { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -266,24 +309,28 @@
     </div>
   </div>
 
-  <div class="section">
-    <h2>Chat</h2>
-    <form class="chat-form" hx-post="/chat" hx-target="#chat-status" hx-swap="innerHTML" hx-on::after-request="this.reset()">
-      <textarea name="message" placeholder="Type a message to send to the agent..." required></textarea>
-      <div class="chat-actions">
-        <button class="btn-primary" type="submit">Send</button>
-        <div id="chat-status" class="chat-status"></div>
+  <div class="chat-event-container">
+    <div class="section">
+      <h2>Live Event Stream</h2>
+      <div id="event-stream" class="event-list">
+        <div class="event-item" style="color: #888;">Connecting to event stream...</div>
       </div>
-    </form>
-    <div id="chat-log" class="chat-log">
-      <div class="chat-empty">Waiting for messages...</div>
     </div>
-  </div>
 
-  <div class="section">
-    <h2>Live Event Stream</h2>
-    <div id="event-stream" class="event-list">
-      <div class="event-item" style="color: #888;">Connecting to event stream...</div>
+    <div class="section">
+      <h2>Chat</h2>
+        <div class="chat-panel">
+          <div id="chat-log" class="chat-log">
+            <div class="chat-empty">Waiting for messages...</div>
+          </div>
+          <form class="chat-form" hx-post="/chat" hx-target="#chat-status" hx-swap="innerHTML" hx-on::after-request="this.reset()">
+            <textarea name="message" placeholder="Type a message to send to the agent..." required></textarea>
+            <div class="chat-actions">
+              <button class="btn-primary" type="submit">Send</button>
+              <div id="chat-status" class="chat-status"></div>
+            </div>
+          </form>
+        </div>
     </div>
   </div>
 

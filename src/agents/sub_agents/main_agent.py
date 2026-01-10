@@ -73,14 +73,16 @@ class MainAgent(BaseAgent):
             summary_interval=5
         )
         
-        # Initialize LLM model for Ollama
-        model_name = os.getenv("AGENT_MODEL", "qwen2:7b-instruct-q5_K_M")
-        num_ctx = int(os.getenv("AGENT_NUM_CTX", "4096"))
+        # Initialize LLM model for Ollama (guard against empty env values)
+        model_name_env = os.getenv("AGENT_MODEL")
+        model_name = (model_name_env.strip() if model_name_env and model_name_env.strip() else "qwen3:8b-q6_K")
+        num_ctx = int(os.getenv("AGENT_NUM_CTX") or "4096")
         
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
             num_ctx=num_ctx,
-            temperature=0.8
+            temperature=0.8,
+            use_chat_api=True,
         )
         
         # Initialize tools (calls parent's add_tool internally)
