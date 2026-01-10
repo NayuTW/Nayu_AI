@@ -104,7 +104,6 @@
       border-radius: 4px;
       font-family: 'Consolas', 'Monaco', monospace;
       font-size: 12px;
-      height: 300px;
       overflow-y: auto;
       border: 1px solid #333;
     }
@@ -145,8 +144,133 @@
       border-bottom: 1px solid #eee;
     }
     
+    .chat-log {
+      background: #ffffff;
+      border: 1px solid #e1e4e8;
+      border-radius: 8px;
+      padding: 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column !important;
+      gap: 8px;
+      flex: 1;
+    }
+    
+    .chat-message {
+      max-width: 85%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      line-height: 1.5;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    
+    .chat-user {
+      align-self: flex-end;
+      background: #e7f1ff;
+      border: 1px solid #c7dcff;
+    }
+    
+    .chat-assistant {
+      align-self: flex-start;
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+    }
+    
+    .chat-role {
+      font-size: 12px;
+      font-weight: 700;
+      color: #586069;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .chat-empty {
+      text-align: center;
+      color: #888;
+      padding: 16px;
+      width: 100%;
+    }
+    
+    .chat-form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-direction: column;
+      flex-wrap: wrap;
+    }
+    
+    .chat-form textarea {
+      flex: 1 1 100%;
+      flex-direction: column-reverse;
+      min-height: 90px;
+      padding: 10px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 14px;
+      resize: horizontal;
+      font-family: inherit;
+    }
+    
+    .chat-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    
+    .chat-status {
+      font-size: 12px;
+      color: #586069;
+    }
+    
+    .chat-event-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-height: 75vh;
+    }
+    
+    .chat-event-container .section {
+      display: flex;
+      flex-direction: column;
+      max-height: 75vh;
+      resize: vertical;
+      overflow: hidden;
+    }
+    
+    .chat-event-container .section h2 {
+      flex-shrink: 0;
+    }
+    
+    .chat-event-container .section > div:not(h2) {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    .chat-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+    }
+    
+    .event-list {
+      height: 100%;
+    }
+    
+    .chat-log {
+      flex-direction: column-reverse;
+      height: 100%;
+    }
+
     @media (max-width: 1024px) {
       .grid-2, .settings-grid { grid-template-columns: 1fr; }
+      .chat-event-container { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -185,10 +309,28 @@
     </div>
   </div>
 
-  <div class="section">
-    <h2>Live Event Stream</h2>
-    <div id="event-stream" class="event-list">
-      <div class="event-item" style="color: #888;">Connecting to event stream...</div>
+  <div class="chat-event-container">
+    <div class="section">
+      <h2>Live Event Stream</h2>
+      <div id="event-stream" class="event-list">
+        <div class="event-item" style="color: #888;">Connecting to event stream...</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Chat</h2>
+        <div class="chat-panel">
+          <div id="chat-log" class="chat-log">
+            <div class="chat-empty">Waiting for messages...</div>
+          </div>
+          <form class="chat-form" hx-post="/chat" hx-target="#chat-status" hx-swap="innerHTML" hx-on::after-request="this.reset()">
+            <textarea name="message" placeholder="Type a message to send to the agent..." required></textarea>
+            <div class="chat-actions">
+              <button class="btn-primary" type="submit">Send</button>
+              <div id="chat-status" class="chat-status"></div>
+            </div>
+          </form>
+        </div>
     </div>
   </div>
 
@@ -200,8 +342,24 @@
   </div>
 
   <script>
+    const MAX_CHAT_MESSAGES = 50;
+    const ANSWER_KEYS = ['final_answer', 'answer', 'output', 'content', 'text'];
+
+    const extractAnswerText = (item) => {
+        if (!item) return '';
+        if (typeof item === 'object') {
+            for (const key of ANSWER_KEYS) {
+                if (key in item && item[key] !== undefined && item[key] !== null) {
+                    return item[key];
+                }
+            }
+            return '';
+        }
+        return String(item);
+    };
     const eventStream = document.getElementById('event-stream');
     const healthList = document.getElementById('health-list');
+    const chatLog = document.getElementById('chat-log');
     
     const ws = new WebSocket(`ws://${location.host}/ws`);
     
@@ -213,7 +371,10 @@
             const payload = msg.payload || {};
             eventStream.innerHTML = '';
             if (payload.events) {
-                payload.events.forEach(ev => appendEvent(ev.type, ev.payload, ev.ts));
+                payload.events.forEach(ev => {
+                    appendEvent(ev.type, ev.payload, ev.ts);
+                    handleChatEvent(ev.type, ev.payload);
+                });
             }
             return;
         }
@@ -236,6 +397,7 @@
             return;
         }
         
+        handleChatEvent(msg.type, msg.payload);
         // Append to event stream
         appendEvent(msg.type, msg.payload, msg.ts);
 
@@ -250,6 +412,64 @@
             htmx.ajax('GET', '/examples', {target:'#examples-container', swap:'innerHTML'});
         }
     };
+
+    function handleChatEvent(type, payload) {
+        if (!chatLog) return;
+        if (type === 'agent.input') {
+            appendChatMessage('user', payload?.text || '');
+        } else if (type === 'agent.output') {
+            const answer = extractFinalAnswer(payload);
+            appendChatMessage('assistant', answer);
+        }
+    }
+
+    function appendChatMessage(role, text) {
+        if (!chatLog) return;
+        const safeText = text ? escapeHtml(String(text)) : '';
+        if (chatLog.querySelector('.chat-empty')) {
+            chatLog.innerHTML = '';
+        }
+        const msg = document.createElement('div');
+        msg.className = `chat-message chat-${role}`;
+        msg.innerHTML = `
+            <div class="chat-role">${role === 'user' ? 'User' : 'Assistant'}</div>
+            <div class="chat-text">${safeText}</div>
+        `;
+        chatLog.appendChild(msg);
+        chatLog.scrollTop = chatLog.scrollHeight;
+        while (chatLog.children.length > MAX_CHAT_MESSAGES) {
+            chatLog.removeChild(chatLog.firstChild);
+        }
+    }
+
+    function extractFinalAnswer(payload) {
+        if (!payload) return '';
+        const finalAnswers = payload.final_answers;
+        if (Array.isArray(finalAnswers) && finalAnswers.length > 0) {
+            const texts = finalAnswers
+                .map(extractAnswerText)
+                .filter(text => text !== undefined && text !== null);
+            if (texts.length) {
+                return texts.join("\n\n");
+            }
+        } else if (finalAnswers) {
+            const single = extractAnswerText(finalAnswers);
+            if (single) return single;
+        }
+
+        const fallback = extractAnswerText(payload);
+        if (fallback) return fallback;
+        return 'Unable to display response';
+    }
+
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
 
     function appendEvent(type, payload, ts) {
         const timestamp = ts ? new Date(ts * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();

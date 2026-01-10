@@ -55,7 +55,8 @@ class VisionAgent(BaseAgent):
             self.model = OllamaLiteLLMModel(
                 model_id=model_name,
                 num_ctx=num_ctx,
-                temperature=0.8
+                temperature=0.8,
+                use_chat_api=True,
             )
             # Initialize tools (calls parent's add_tool internally)
             self._init_tools()

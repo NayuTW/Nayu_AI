@@ -16,6 +16,7 @@ from src.agents.sub_agents.vision_agent import VisionAgent
 from src.agents.core.events import EventBus
 from src.agents.core.registry import ToolRegistry
 from src.agents.core.store import SQLiteStore
+from src.agents.core.output_handler import AgentOutputHandler
 from src.agents.llm.litellm_model import OllamaLiteLLMModel
 from src.agents.memory.session_manager import SessionManager
 from src.agents.notify.notifier import Notifier
@@ -62,6 +63,7 @@ class MainAgent(BaseAgent):
 
         # Set agent description
         self._set_description()
+        self.output_handler = AgentOutputHandler(bus)
         
         # Initialize session manager
         self.session_manager = SessionManager(
@@ -71,14 +73,16 @@ class MainAgent(BaseAgent):
             summary_interval=5
         )
         
-        # Initialize LLM model for Ollama
-        model_name = os.getenv("AGENT_MODEL", "qwen2:7b-instruct-q5_K_M")
-        num_ctx = int(os.getenv("AGENT_NUM_CTX", "4096"))
+        # Initialize LLM model for Ollama (guard against empty env values)
+        model_name_env = os.getenv("AGENT_MODEL")
+        model_name = (model_name_env.strip() if model_name_env and model_name_env.strip() else "qwen3:8b-q6_K")
+        num_ctx = int(os.getenv("AGENT_NUM_CTX") or "4096")
         
         self.model = OllamaLiteLLMModel(
             model_id=model_name,
             num_ctx=num_ctx,
-            temperature=0.8
+            temperature=0.8,
+            use_chat_api=True,
         )
         
         # Initialize tools (calls parent's add_tool internally)
@@ -417,12 +421,14 @@ Respond naturally and use tools only if needed. You can reference previous messa
             if "return_full_result" in inspect.signature(self.agent.run).parameters:
                 run_kwargs["return_full_result"] = True
             run_output = await asyncio.to_thread(self.agent.run, full_prompt, **run_kwargs)
+            final_answers = None
             
             latency_ms = (time.time() - t0) * 1000
             print(f"Agent response time: {latency_ms:.0f}ms")
             result = run_output.output if isinstance(run_output, RunResult) else run_output
             
             if isinstance(run_output, RunResult):
+                final_answers = getattr(run_output, "final_answers", None)
                 action_steps = self._sanitize_steps(run_output.steps or [])
                 if action_steps:
                     self._latest_action_steps.extend(action_steps)
@@ -442,26 +448,30 @@ Respond naturally and use tools only if needed. You can reference previous messa
                 result = str(result)
             if not result.strip():
                 result = "I processed your request."
+            extracted_final = self.output_handler.extract_final_answer_text(final_answers) if final_answers else None
+            final_text = extracted_final or result
             
             # Add assistant response to session
             self.session_manager.add_message(
                 session_id=active_session_id,
                 role="assistant",
-                content=result,
+                content=final_text,
                 metadata={"latency_ms": latency_ms}
             )
             
             # Persist the interaction for fine-tuning
-            await self._persist_example(user_text, result, mem_digest, source, user_id, channel_id)
+            await self._persist_example(user_text, final_text, mem_digest, source, user_id, channel_id)
             
             # Publish output event
-            await self.bus.publish("agent.output", {
-                "text": result,
-                "latency_ms": latency_ms,
-                "session_id": active_session_id
-            })
+            await self.output_handler.publish_output(
+                text=final_text,
+                latency_ms=latency_ms,
+                session_id=active_session_id,
+                final_answers=final_answers,
+                ensure_jsonable=self._ensure_jsonable,
+            )
             
-            return result
+            return final_text
             
         except Exception as e:
             error_msg = f"Error processing request: {str(e)}"
