@@ -64,15 +64,17 @@ class AgentFactory:
         ident = str(identifier).strip().lower()
         for name, instance in cls._instances.items():
             class_name = instance.__class__.__name__
-            candidates = {
-                name.lower(),
-                class_name.lower(),
-                class_name.lower().replace("agent", ""),
-            }
+            class_lower = class_name.lower()
+            candidates = {name.lower(), class_lower}
+            if class_lower.endswith("agent"):
+                candidates.add(class_lower[:-5])
             if ident in candidates:
                 return instance
 
-        return default
+        if default and ident in ("main", "mainagent", "main_agent"):
+            return default
+
+        return None
     
     @classmethod
     def all_instances(cls) -> Dict[str, Any]:

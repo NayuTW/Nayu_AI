@@ -327,7 +327,7 @@
             <div style="display: flex; gap: 8px; align-items: center;">
               <label for="chat-agent-select" style="font-weight: 600; font-size: 13px; min-width: 70px;">Agent</label>
               <select id="chat-agent-select" name="agent_name" hx-get="/api/agents/instances" hx-trigger="load" hx-swap="innerHTML" style="flex: 1; padding: 8px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px;">
-                <option value="">MainAgent (default)</option>
+                <option value="">Loading agents...</option>
               </select>
             </div>
             <textarea name="message" placeholder="Type a message to send to the agent..." required></textarea>

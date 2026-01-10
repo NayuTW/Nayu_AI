@@ -30,9 +30,9 @@ def _ensure_jsonable(obj: Any) -> Any:
     return str(obj)
 
 
-def _extract_final_text(raw_result: Any, final_answers: Any) -> str:
+def _extract_final_text(raw_result: Any, final_answers: Any, bus: Optional[Any] = None) -> str:
     """Prefer final_answers text when available, otherwise fall back to result."""
-    handler = AgentOutputHandler(bus=None)
+    handler = AgentOutputHandler(bus=bus)
     extracted = handler.extract_final_answer_text(final_answers) if final_answers else None
 
     if raw_result is None:
@@ -96,7 +96,7 @@ async def dispatch_to_agent(
         run_output = await asyncio.to_thread(run_fn, message)
         final_answers = getattr(run_output, "final_answers", None)
         raw_result = getattr(run_output, "output", run_output)
-        final_text = _extract_final_text(raw_result, final_answers)
+        final_text = _extract_final_text(raw_result, final_answers, bus=bus)
         latency_ms = (time.time() - t0) * 1000
 
         if bus:
