@@ -167,9 +167,11 @@ async def send_chat(message: str = Form(...), agent_name: str = Form(None)):
         return HTMLResponse("Please enter a message.", status_code=400)
     if agent is None:
         return HTMLResponse("Agent not available.", status_code=503)
-    target_agent = AgentFactory.resolve_instance(agent_name, default=agent)
+    target_agent = AgentFactory.resolve_instance(agent_name, default=None)
     if target_agent is None:
-        return HTMLResponse(f"Agent '{agent_name}' not found.", status_code=400)
+        if agent_name:
+            return HTMLResponse(f"Agent '{agent_name}' not found.", status_code=400)
+        target_agent = agent
     try:
         await dispatch_to_agent(
             target_agent,

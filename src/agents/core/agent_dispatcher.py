@@ -93,7 +93,10 @@ async def dispatch_to_agent(
         if run_fn is None:
             raise RuntimeError("Agent cannot process messages")
 
-        run_output = await asyncio.to_thread(run_fn, message)
+        if inspect.iscoroutinefunction(run_fn):
+            run_output = await run_fn(message)
+        else:
+            run_output = await asyncio.to_thread(run_fn, message)
         final_answers = getattr(run_output, "final_answers", None)
         raw_result = getattr(run_output, "output", run_output)
         final_text = _extract_final_text(raw_result, final_answers, bus=bus)

@@ -319,10 +319,12 @@ async def main():
                     continue
                 text_to_send = parts[1].strip()
 
-            target_agent = AgentFactory.resolve_instance(target_name, default=agent)
+            target_agent = AgentFactory.resolve_instance(target_name, default=None)
             if not target_agent:
-                print(f"Agent '{target_name}' not found.")
-                continue
+                if target_name:
+                    print(f"Agent '{target_name}' not found.")
+                    continue
+                target_agent = agent
 
             resp = await dispatch_to_agent(
                 target_agent,
