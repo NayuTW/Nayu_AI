@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import time
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from src.agents.core.output_handler import AgentOutputHandler
 
@@ -50,7 +50,7 @@ async def dispatch_to_agent(
     target_agent: Any,
     message: str,
     source: str = "cli",
-    external_metadata: Optional[dict[str, Any]] = None,
+    external_metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Send a prompt directly to a specific agent, preferring the agent's own handler.

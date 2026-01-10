@@ -72,7 +72,7 @@ class AgentFactory:
             if ident in candidates:
                 return instance
 
-        return default if default and ident in ("main", "mainagent") else None
+        return default
     
     @classmethod
     def all_instances(cls) -> Dict[str, Any]:
