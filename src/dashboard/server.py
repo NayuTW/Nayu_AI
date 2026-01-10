@@ -360,7 +360,10 @@ async def remove_agent(agent_name: str):
 @app.get("/api/agents/instances")
 async def get_agent_instances():
     """Get list of all active agent instances."""
-    instances = AgentFactory.all_instances().keys()
+    try:
+        instances = list(AgentFactory.all_instances().keys())
+    except Exception:
+        instances = []
     options = ['<option value="">MainAgent (default)</option>']
     options.extend([f'<option value="{name}">{name}</option>' for name in instances])
     return HTMLResponse("".join(options))
