@@ -11,6 +11,7 @@ from src.agents.core.events import EventBus
 from src.agents.core.registry import ToolRegistry
 from src.agents.core.health import HealthChecker
 from src.agents.core.store import SQLiteStore
+from src.agents.core.agent_dispatcher import dispatch_to_agent
 from src.agents.notify.notifier import Notifier
 from src.agents.notify.error_speaker import ErrorSpeaker
 from src.agents.tools.speech_smol import SpeechSmolTool
@@ -155,6 +156,7 @@ async def main():
     print("  '/remove-agent <name>' - Remove a managed agent")
     print("  '/delegate <parent> <child>' - Delegate an existing agent to another")
     print("  '/undelegate <parent> <child>' - Remove delegation between agents")
+    print("  '@AgentName <message>' - Send a prompt directly to a specific agent (default: MainAgent)")
     print("  'quit'            - Exit the application")
     print("=" * 60)
     print()
@@ -303,14 +305,33 @@ async def main():
                     print("  (none)")
                 continue
             
-            # Process user message
-            resp = await agent.handle_user_message(
-                user,
+            # Process user message (optionally targeting a specific agent)
+            target_name = None
+            text_to_send = user
+            if user.startswith("@"):
+                parts = user[1:].split(None, 1)
+                if not parts:
+                    print("Usage: @AgentName <message>")
+                    continue
+                target_name = parts[0]
+                if len(parts) < 2 or not parts[1].strip():
+                    print("Please provide a message after the agent name.")
+                    continue
+                text_to_send = parts[1].strip()
+
+            target_agent = AgentFactory.resolve_instance(target_name, default=agent)
+            if not target_agent:
+                print(f"Agent '{target_name}' not found.")
+                continue
+
+            resp = await dispatch_to_agent(
+                target_agent,
+                text_to_send,
                 source="cli",
-                external_metadata={"tag": "cli"}
+                external_metadata={"tag": "cli", "target_agent": target_name or "MainAgent"}
             )
             safe_resp = resp.replace("\r", "").replace("\x1b", "").strip()
-            print(f"Agent: {safe_resp}")
+            print(f"{target_agent.__class__.__name__}: {safe_resp}")
             sys.stdout.flush()
             sys.stdin.flush()
             print()

@@ -52,6 +52,29 @@ class AgentFactory:
         return cls._instances.get(name)
     
     @classmethod
+    def resolve_instance(cls, identifier: Optional[str], default: Optional[Any] = None) -> Optional[Any]:
+        """
+        Resolve an agent instance by identifier (case-insensitive).
+
+        Supports class names with or without the 'Agent' suffix.
+        """
+        if identifier is None or (isinstance(identifier, str) and not identifier.strip()):
+            return default
+
+        ident = str(identifier).strip().lower()
+        for name, instance in cls._instances.items():
+            class_name = instance.__class__.__name__
+            candidates = {
+                name.lower(),
+                class_name.lower(),
+                class_name.lower().replace("agent", ""),
+            }
+            if ident in candidates:
+                return instance
+
+        return default if default and ident in ("main", "mainagent") else None
+    
+    @classmethod
     def all_instances(cls) -> Dict[str, Any]:
         """Get all registered agent instances."""
         return dict(cls._instances)

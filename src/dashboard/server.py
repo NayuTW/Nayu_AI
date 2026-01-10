@@ -11,6 +11,7 @@ from src.agents.core.registry import ToolRegistry
 from src.agents.core.health import HealthChecker
 from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
+from src.agents.core.agent_dispatcher import dispatch_to_agent
 from src.agents.factory import AgentFactory
 
 app = FastAPI()
@@ -159,17 +160,24 @@ async def toggle_speak_on_error():
     return await settings_partial()
 
 @app.post("/chat", response_class=HTMLResponse)
-async def send_chat(message: str = Form(...)):
-    """Send a chat message from the dashboard to the main agent."""
+async def send_chat(message: str = Form(...), agent_name: str = Form(None)):
+    """Send a chat message from the dashboard to a chosen agent (default: main)."""
     text = (message or "").strip()
     if not text:
         return HTMLResponse("Please enter a message.", status_code=400)
     if agent is None:
         return HTMLResponse("Agent not available.", status_code=503)
+    target_agent = AgentFactory.resolve_instance(agent_name, default=agent)
+    if target_agent is None:
+        return HTMLResponse(f"Agent '{agent_name}' not found.", status_code=400)
     try:
-        # This will publish agent.input/agent.output events captured by the dashboard websocket
-        await agent.handle_user_message(user_text=text, source="dashboard")
-        return HTMLResponse("Message sent.")
+        await dispatch_to_agent(
+            target_agent,
+            text,
+            source="dashboard",
+            external_metadata={"target_agent": agent_name or "MainAgent"},
+        )
+        return HTMLResponse(f"Message sent to {target_agent.__class__.__name__}.")
     except Exception as e:
         await bus.publish("agent.error", {"error": str(e), "source": "dashboard"})
         return HTMLResponse(f"Error sending message: {e}", status_code=500)
@@ -347,8 +355,9 @@ async def remove_agent(agent_name: str):
 async def get_agent_instances():
     """Get list of all active agent instances."""
     instances = AgentFactory.all_instances().keys()
-    options = "".join([f'<option value="{name}">{name}</option>' for name in instances])
-    return HTMLResponse(f'<option value="">Select agent...</option>{options}')
+    options = ['<option value="">MainAgent (default)</option>']
+    options.extend([f'<option value="{name}">{name}</option>' for name in instances])
+    return HTMLResponse("".join(options))
 
 @app.post("/api/agents/delegate")
 async def delegate_agent(request: Request):
