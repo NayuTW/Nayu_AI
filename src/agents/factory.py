@@ -17,6 +17,7 @@ class AgentFactory:
     
     _registry: Dict[str, type] = {}
     _instances: Dict[str, Any] = {}
+    _default_aliases = {"main", "mainagent", "main_agent"}
     
     @classmethod
     def register(cls, agent_type: str, agent_class: type) -> None:
@@ -50,6 +51,31 @@ class AgentFactory:
     def get_instance(cls, name: str) -> Optional[Any]:
         """Get an agent instance by name."""
         return cls._instances.get(name)
+    
+    @classmethod
+    def resolve_instance(cls, identifier: Optional[str], default: Optional[Any] = None) -> Optional[Any]:
+        """
+        Resolve an agent instance by identifier (case-insensitive).
+
+        Supports class names with or without the 'Agent' suffix.
+        """
+        if identifier is None or (isinstance(identifier, str) and not identifier.strip()):
+            return default
+
+        ident = str(identifier).strip().lower()
+        for name, instance in cls._instances.items():
+            class_name = instance.__class__.__name__
+            class_lower = class_name.lower()
+            candidates = {name.lower(), class_lower}
+            if class_lower.endswith("agent"):
+                candidates.add(class_lower[:-5])
+            if ident in candidates:
+                return instance
+
+        if default and ident in cls._default_aliases:
+            return default
+
+        return None
     
     @classmethod
     def all_instances(cls) -> Dict[str, Any]:

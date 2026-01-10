@@ -11,6 +11,7 @@ from src.agents.core.registry import ToolRegistry
 from src.agents.core.health import HealthChecker
 from src.agents.notify.notifier import Notifier
 from src.agents.core.store import SQLiteStore
+from src.agents.core.agent_dispatcher import dispatch_to_agent
 from src.agents.factory import AgentFactory
 
 app = FastAPI()
@@ -159,17 +160,30 @@ async def toggle_speak_on_error():
     return await settings_partial()
 
 @app.post("/chat", response_class=HTMLResponse)
-async def send_chat(message: str = Form(...)):
-    """Send a chat message from the dashboard to the main agent."""
+async def send_chat(message: str = Form(...), agent_name: str = Form(None)):
+    """Send a chat message from the dashboard to a chosen agent (default: main)."""
     text = (message or "").strip()
     if not text:
         return HTMLResponse("Please enter a message.", status_code=400)
     if agent is None:
         return HTMLResponse("Agent not available.", status_code=503)
+    target_agent = AgentFactory.resolve_instance(agent_name, default=None)
+    if target_agent is None:
+        if agent_name:
+            return HTMLResponse(f"Agent '{agent_name}' not found.", status_code=400)
+        target_agent = agent
     try:
-        # This will publish agent.input/agent.output events captured by the dashboard websocket
-        await agent.handle_user_message(user_text=text, source="dashboard")
-        return HTMLResponse("Message sent.")
+        display_name = next(
+            (name for name, inst in AgentFactory.all_instances().items() if inst is target_agent),
+            target_agent.__class__.__name__,
+        )
+        await dispatch_to_agent(
+            target_agent,
+            text,
+            source="dashboard",
+            external_metadata={"target_agent": agent_name or display_name},
+        )
+        return HTMLResponse(f"Message sent to {display_name}.")
     except Exception as e:
         await bus.publish("agent.error", {"error": str(e), "source": "dashboard"})
         return HTMLResponse(f"Error sending message: {e}", status_code=500)
@@ -346,9 +360,20 @@ async def remove_agent(agent_name: str):
 @app.get("/api/agents/instances")
 async def get_agent_instances():
     """Get list of all active agent instances."""
-    instances = AgentFactory.all_instances().keys()
-    options = "".join([f'<option value="{name}">{name}</option>' for name in instances])
-    return HTMLResponse(f'<option value="">Select agent...</option>{options}')
+    try:
+        instances = AgentFactory.all_instances()
+        if not instances:
+            # If no instances yet, return just the default option
+            return HTMLResponse('<option value="">MainAgent (default)</option>')
+        
+        options = ['<option value="">MainAgent (default)</option>']
+        for name in instances.keys():
+            options.append(f'<option value="{name}">{name}</option>')
+        return HTMLResponse("".join(options))
+    except Exception as e:
+        # Log the error and return a minimal response
+        print(f"Error getting agent instances: {e}")
+        return HTMLResponse('<option value="">MainAgent (default)</option>')
 
 @app.post("/api/agents/delegate")
 async def delegate_agent(request: Request):
