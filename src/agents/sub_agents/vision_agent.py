@@ -25,6 +25,7 @@ from src.agents.tools.active_browser import (
     scroll_down,
     scroll_up,
     click_element,
+    click_answer,
     click_link,
     get_current_url,
     init_browser_tools,
@@ -85,6 +86,7 @@ class VisionAgent(BaseAgent):
             start_browser,
             go_to_url,
             click_element,
+            click_answer,
             click_link,
             search_item_ctrl_f,
             scroll_down,
@@ -139,6 +141,7 @@ Examples of good task descriptions:
 - start_browser(): Open Chrome for web browsing
 - go_to_url(url): Navigate to a website (e.g., "https://github.com")
 - click_element(text): Click buttons/elements by visible text
+  click_answer(text): Click a multiple choice answer by the corresponding letter
 - click_link(text): Click links by their text
 - search_item_ctrl_f(text): Find and focus on text on the current page
 - scroll_down(num_pixels): Scroll down (default 1200 = one viewport)

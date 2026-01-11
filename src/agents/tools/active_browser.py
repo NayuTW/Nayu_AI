@@ -2,10 +2,11 @@
 Active browser tools for interactive web browsing using Helium.
 Provides tools for navigating, searching, and interacting with web pages.
 """
+import os
 from time import sleep
 from typing import Optional, Any
 
-import helium
+from helium import *
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -15,7 +16,8 @@ from smolagents import tool
 
 
 load_dotenv()
-
+# Chrome profile-directory
+chrome_dir = os.getenv('CHROME_DIR', '$HOME/.config/chromium/')
 # Global browser state
 _browser_driver: Optional[Any] = None
 _current_agent: Optional[Any] = None
@@ -51,6 +53,8 @@ _chrome_options.add_argument("--force-device-scale-factor=1")
 _chrome_options.add_argument("--window-size=1920,1080")
 _chrome_options.add_argument("--disable-pdf-viewer")
 _chrome_options.add_argument("--window-position=0,0")
+_chrome_options.add_argument(f"--user-data-dir={chrome_dir}")
+_chrome_options.add_argument("--profile-directory=Default")
 
 @tool
 def start_browser() -> str:
@@ -99,15 +103,49 @@ def click_element(text: str) -> str:
         driver = get_driver()
         if driver is None:
             return "Error: Browser not started. Call start_browser first."
-        helium.click(text)
+        helium.click(text.replace('.','').strip())
         sleep(1.0)
         return f"Clicked on element: {text}"
-    except Exception as e:
-        return f"Error clicking element: {e}"
+    except Exception:
+        selector = f'//*[contains(@aria-label, "{text.replace('.','').strip()}")]'
+        try:
+
+            helium.click(S(selector))
+            sleep(1.0)
+            return f"Clicked on element containing: {text}"
+        except Exception as e:
+            return f"Error clicking element: {e}"
 
 click_element.name = "click_element"
 click_element.description = "Click on an element by its visible text."
 
+@tool
+def click_answer(text: str) -> str:
+    """Click on a multiple choice question element by its visible text.
+    
+    Args:
+        text: The visible letter of the multiple choice answer to click
+    """
+    try:
+        driver = get_driver()
+        if driver is None:
+            return "Error: Browser not started. Call start_browser first."
+        helium.click(S(f'//input[@type="radio" and contains(@aria-label, "{text.strip()}")]'))
+        sleep(1.0)
+        return f"Clicked on answer: {text}"
+    except Exception:
+        partial_text = text.replace('.','')
+        selector = f'//input[@type="radio" and contains(@aria-label, "{text[0]}")]'
+        try:
+
+            helium.click(S(selector))
+            sleep(1.0)
+            return f"Clicked on answer: {text}"
+        except Exception as e:
+            return f"Error clicking element: {e}"
+
+click_answer.name = "click_answer"
+click_answer.description = "Click on a multiple choice answer choice by its corresponding letter."
 
 @tool
 def click_link(text: str) -> str:
