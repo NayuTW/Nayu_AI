@@ -120,34 +120,6 @@ click_element.name = "click_element"
 click_element.description = "Click on an element by its visible text."
 
 @tool
-def click_answer(text: str) -> str:
-    """Click on a multiple choice question element by its visible text.
-    
-    Args:
-        text: The visible letter of the multiple choice answer to click
-    """
-    try:
-        driver = get_driver()
-        if driver is None:
-            return "Error: Browser not started. Call start_browser first."
-        helium.click(S(f'//input[@type="radio" and contains(@aria-label, "{text.strip()}")]'))
-        sleep(1.0)
-        return f"Clicked on answer: {text}"
-    except Exception:
-        partial_text = text.replace('.','')
-        selector = f'//input[@type="radio" and contains(@aria-label, "{text[0]}")]'
-        try:
-
-            helium.click(S(selector))
-            sleep(1.0)
-            return f"Clicked on answer: {text}"
-        except Exception as e:
-            return f"Error clicking element: {e}"
-
-click_answer.name = "click_answer"
-click_answer.description = "Click on a multiple choice answer choice by its corresponding letter."
-
-@tool
 def click_link(text: str) -> str:
     """Click on a link by its visible text.
     
