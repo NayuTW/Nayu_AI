@@ -27,7 +27,7 @@ class DesktopCurrentCapture:
     
     def __init__(
         self,
-        interval: float = 2.0,
+        interval: float = 1.0,
         output_dir: str = ".cache",
         error_callback: Optional[Callable[[str], None]] = None,
     ):

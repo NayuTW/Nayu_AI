@@ -42,7 +42,7 @@ def stub_external_modules(monkeypatch):
     monkeypatch.setitem(sys.modules, "sklearn.metrics.pairwise", pairwise_module)
     monkeypatch.setitem(sys.modules, "litellm", types.SimpleNamespace(completion=lambda **_kwargs: None))
     tool_modules = {
-        "src.agents.tools.webbrowser_smol": "WebBrowserSmolTool",
+        "src.agents.tools.webbrowser": "WebBrowserSmolTool",
         "src.agents.tools.desktop_smol": "DesktopSmolTool",
         "src.agents.tools.vision_smol": "VisionSmolTool",
         "src.agents.tools.memory_smol": "MemorySmolTool",
@@ -76,6 +76,9 @@ class DummyStore:
 class DummyEmbedder:
     def encode(self, text):
         return np.zeros(3)
+
+    def embed(self, text):
+        return self.encode(text)
 
 
 class DummyCallbacks:
